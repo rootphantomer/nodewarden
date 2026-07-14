@@ -160,6 +160,34 @@ function toBasicAuthHeader(username: string, password: string): string {
   return `Basic ${token}`;
 }
 
+const MAX_WEBDAV_REDIRECTS = 3;
+
+async function fetchWebDav(url: string, init: RequestInit): Promise<Response> {
+  let currentUrl = url;
+  let currentInit = init as Record<string, unknown>;
+  for (let i = 0; i <= MAX_WEBDAV_REDIRECTS; i++) {
+    const response = await fetch(currentUrl, currentInit as RequestInit);
+    const status = response.status;
+    if (status !== 301 && status !== 302 && status !== 303 && status !== 307 && status !== 308) {
+      return response;
+    }
+    const location = response.headers.get('Location');
+    if (!location) return response;
+    currentUrl = new URL(location, currentUrl).toString();
+    // Strip auth header on cross-origin redirect (e.g. Cloudreve → S3 presigned URL).
+    // The redirect target carries its own auth (query-param signature) and does
+    // not expect a Basic Authorization header.
+    if (currentInit.headers && typeof currentInit.headers === 'object' && !Array.isArray(currentInit.headers)) {
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(currentInit.headers as Record<string, string>)) {
+        if (k.toLowerCase() !== 'authorization') next[k] = v;
+      }
+      currentInit = { ...currentInit, headers: next };
+    }
+  }
+  throw new Error('WebDAV redirect limit exceeded');
+}
+
 function buildCanonicalQueryString(url: URL): string {
   const params = Array.from(url.searchParams.entries()).sort(([aKey, aValue], [bKey, bValue]) => {
     if (aKey === bKey) return aValue.localeCompare(bValue);
@@ -408,7 +436,7 @@ async function downloadFromWebDav(config: WebDavBackupDestination, relativePath:
   }
   const authHeader = toBasicAuthHeader(config.username, config.password);
   const remotePath = webDavFullPath(config, normalized);
-  const response = await fetch(buildWebDavUrl(config.baseUrl, remotePath), {
+  const response = await fetchWebDav(buildWebDavUrl(config.baseUrl, remotePath), {
     method: 'GET',
     headers: {
       Authorization: authHeader,
@@ -447,7 +475,7 @@ async function existsInWebDav(config: WebDavBackupDestination, relativePath: str
 async function statWebDavFile(config: WebDavBackupDestination, relativePath: string): Promise<RemoteBackupFileStat | null> {
   const authHeader = toBasicAuthHeader(config.username, config.password);
   const remotePath = webDavFullPath(config, relativePath);
-  const response = await fetch(buildWebDavUrl(config.baseUrl, remotePath), {
+  const response = await fetchWebDav(buildWebDavUrl(config.baseUrl, remotePath), {
     method: 'HEAD',
     headers: {
       Authorization: authHeader,
