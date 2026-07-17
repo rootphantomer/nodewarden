@@ -691,7 +691,7 @@ export default function SettingsPage(props: SettingsPageProps) {
                     aria-label={t('txt_refresh')}
                     onClick={() => void refreshAccountPasskeys()}
                   >
-                    <RefreshCw size={14} className="btn-icon" />
+                    <RefreshCw size={14} className={`btn-icon${accountPasskeysLoading ? ' btn-icon-spin' : ''}`} />
                     {t('txt_refresh')}
                   </button>
                 </div>
@@ -780,7 +780,7 @@ export default function SettingsPage(props: SettingsPageProps) {
                     disabled={twoFactorStatusRefreshing}
                     onClick={() => void refreshTwoFactorStatus()}
                   >
-                    <RefreshCw size={14} className="btn-icon" />
+                    <RefreshCw size={14} className={`btn-icon${twoFactorStatusRefreshing ? ' btn-icon-spin' : ''}`} />
                     {t('txt_refresh_status')}
                   </button>
                 </div>

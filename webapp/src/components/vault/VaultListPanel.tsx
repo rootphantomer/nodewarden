@@ -389,7 +389,7 @@ export default function VaultListPanel(props: VaultListPanelProps) {
                 )}
               </div>
               <button type="button" className="btn btn-secondary small list-icon-btn" disabled={props.busy || props.loading} onClick={props.onSyncVault}>
-                <RefreshCw size={14} className="btn-icon" /> {t('txt_sync_vault')}
+                <RefreshCw size={14} className={`btn-icon${props.busy || props.loading ? ' btn-icon-spin' : ''}`} /> {t('txt_sync_vault')}
               </button>
               {props.sidebarFilter.kind === 'duplicates' && !props.isMobileLayout ? (
                 <button type="button" className="btn btn-secondary small" onClick={props.onSelectUniqueFromDuplicates}>

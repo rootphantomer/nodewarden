@@ -296,7 +296,7 @@ export default function SendsPage(props: SendsPageProps) {
             onInput={(e) => setSearch((e.currentTarget as HTMLInputElement).value)}
           />
           <button type="button" className="btn btn-secondary small list-icon-btn" disabled={busy || props.loading} onClick={() => void props.onRefresh()}>
-            <RefreshCw size={14} className="btn-icon" /> {t('txt_refresh')}
+            <RefreshCw size={14} className={`btn-icon${busy || props.loading ? ' btn-icon-spin' : ''}`} /> {t('txt_refresh')}
           </button>
         </div>
         <div className="toolbar actions">

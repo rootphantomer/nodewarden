@@ -91,7 +91,7 @@ export default function PasswordSecurityPage(props: PasswordSecurityPageProps) {
             {allPasswordsVisible ? t('txt_password_security_hide_all') : t('txt_password_security_show_all')}
           </button>}
           <button type="button" className="btn btn-primary password-security-scan" disabled={props.loading || scanning || eligibleCount === 0} onClick={scan}>
-            {scanning ? <RefreshCw size={16} className="btn-icon spin" /> : <ScanSearch size={16} className="btn-icon" />}
+            {scanning ? <RefreshCw size={16} className="btn-icon btn-icon-spin" /> : <ScanSearch size={16} className="btn-icon" />}
             {scanning ? t('txt_checking_password_security') : report ? t('txt_recheck_password_security') : t('txt_check_password_security')}
           </button>
         </div>

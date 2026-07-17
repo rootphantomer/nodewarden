@@ -123,7 +123,7 @@ export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
             </div>
             <div className="actions">
               <button type="button" className="btn btn-secondary small" disabled={props.loading} onClick={props.onRefresh}>
-                <RefreshCw size={14} className="btn-icon" />
+                <RefreshCw size={14} className={`btn-icon${props.loading ? ' btn-icon-spin' : ''}`} />
                 {t('txt_refresh')}
               </button>
               <button
@@ -161,7 +161,7 @@ export default function SecurityDevicesPage(props: SecurityDevicesPageProps) {
             <div className="local-error">
               <span>{props.error}</span>
               <button type="button" className="btn btn-secondary small" disabled={props.loading} onClick={props.onRefresh}>
-                <RefreshCw size={14} className="btn-icon" />
+                <RefreshCw size={14} className={`btn-icon${props.loading ? ' btn-icon-spin' : ''}`} />
                 {t('txt_refresh')}
               </button>
             </div>

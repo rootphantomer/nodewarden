@@ -83,7 +83,7 @@ export function RemoteBackupBrowser(props: RemoteBackupBrowserProps) {
             </div>
             {props.canBrowse ? (
               <button type="button" className="btn btn-secondary small" disabled={props.loadingRemoteBrowser || props.disableWhileBusy} onClick={props.onRefresh}>
-                <RefreshCw size={14} className="btn-icon" />
+                <RefreshCw size={14} className={`btn-icon${props.loadingRemoteBrowser || props.disableWhileBusy ? ' btn-icon-spin' : ''}`} />
                 {t('txt_backup_remote_refresh')}
               </button>
             ) : null}

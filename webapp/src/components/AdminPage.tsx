@@ -55,8 +55,8 @@ export default function AdminPage(props: AdminPageProps) {
       {!!props.error && (
         <div className="local-error">
           <span>{props.error}</span>
-          <button type="button" className="btn btn-secondary small" onClick={props.onRefresh}>
-            <RefreshCw size={14} className="btn-icon" />
+          <button type="button" className="btn btn-secondary small" disabled={props.loading} onClick={props.onRefresh}>
+            <RefreshCw size={14} className={`btn-icon${props.loading ? ' btn-icon-spin' : ''}`} />
             {t('txt_refresh')}
           </button>
         </div>
@@ -65,7 +65,7 @@ export default function AdminPage(props: AdminPageProps) {
         <div className="section-head">
           <h3>{t('txt_users')}</h3>
           <button type="button" className="btn btn-secondary small" disabled={props.loading} onClick={props.onRefresh}>
-            <RefreshCw size={14} className="btn-icon" /> {t('txt_refresh')}
+            <RefreshCw size={14} className={`btn-icon${props.loading ? ' btn-icon-spin' : ''}`} /> {t('txt_refresh')}
           </button>
         </div>
         <table className="table">
@@ -135,7 +135,7 @@ export default function AdminPage(props: AdminPageProps) {
           <h3>{t('txt_invites')}</h3>
           <div className="actions admin-invites-head-actions">
             <button type="button" className="btn btn-secondary small" disabled={props.loading} onClick={props.onRefresh}>
-              <RefreshCw size={14} className="btn-icon" /> {t('txt_refresh')}
+              <RefreshCw size={14} className={`btn-icon${props.loading ? ' btn-icon-spin' : ''}`} /> {t('txt_refresh')}
             </button>
             <button type="button" className="btn btn-danger small" onClick={() => void props.onDeleteInvalidInvites()}>
               <Trash2 size={14} className="btn-icon" /> {t('txt_delete_invalid')}

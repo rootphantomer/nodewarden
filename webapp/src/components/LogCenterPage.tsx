@@ -388,7 +388,7 @@ export default function LogCenterPage(props: LogCenterPageProps) {
           </label>
           <div className="actions log-filter-actions">
             <button type="button" className="btn btn-secondary" disabled={loading} onClick={() => void load(offset)}>
-              <RefreshCw size={14} className="btn-icon" />
+              <RefreshCw size={14} className={`btn-icon${loading ? ' btn-icon-spin' : ''}`} />
               {t('txt_refresh')}
             </button>
             <button

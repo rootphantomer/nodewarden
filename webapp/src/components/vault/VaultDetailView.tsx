@@ -211,7 +211,7 @@ export default function VaultDetailView(props: VaultDetailViewProps) {
                     <Clipboard size={14} className="btn-icon" /> {t('txt_copy')}
                   </button>
                   <button type="button" className="btn btn-secondary small" disabled={checkingBreach || !props.selectedCipher.login?.decPassword} onClick={() => void checkBreach()}>
-                    {checkingBreach ? <RefreshCw size={14} className="btn-icon spin" /> : <ShieldCheck size={14} className="btn-icon" />}
+                    {checkingBreach ? <RefreshCw size={14} className="btn-icon btn-icon-spin" /> : <ShieldCheck size={14} className="btn-icon" />}
                     {checkingBreach ? t('txt_checking_password_security') : t('txt_check_password_breach')}
                   </button>
                 </div>

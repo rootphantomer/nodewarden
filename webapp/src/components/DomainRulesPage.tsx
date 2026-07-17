@@ -347,7 +347,7 @@ export default function DomainRulesPage(props: DomainRulesPageProps) {
             {saving ? t('txt_saving') : t('txt_save')}
           </button>
           <button type="button" className="btn btn-secondary" disabled={props.loading} onClick={props.onRefresh}>
-            <RefreshCw size={14} className="btn-icon" />
+            <RefreshCw size={14} className={`btn-icon${props.loading ? ' btn-icon-spin' : ''}`} />
             {t('txt_sync')}
           </button>
           <a className="btn btn-secondary" href={CUSTOM_GLOBAL_DOMAINS_PR_URL} target="_blank" rel="noreferrer">
