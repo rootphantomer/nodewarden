@@ -251,13 +251,13 @@ export default function App() {
   const [rememberDevice, setRememberDevice] = useState(true);
   const [totpSubmitting, setTotpSubmitting] = useState(false);
 
-  const [disableTotpOpen, setDisableTotpOpen] = useState(false);
-  const [disableTotpPassword, setDisableTotpPassword] = useState('');
-  const [disableTotpSubmitting, setDisableTotpSubmitting] = useState(false);
   const [authRequestDialogDismissedId, setAuthRequestDialogDismissedId] = useState<string | null>(null);
   const [authRequestDialogSelectedId, setAuthRequestDialogSelectedId] = useState<string | null>(null);
   const [authRequestSubmittingId, setAuthRequestSubmittingId] = useState<string | null>(null);
   const [recoverValues, setRecoverValues] = useState({ email: '', password: '', recoveryCode: '' });
+  // Non-null once the recovery code was accepted and two-step login turned off: the page then shows
+  // the "please sign in again" state instead of the recovery form.
+  const [recoverResult, setRecoverResult] = useState<{ newRecoveryCode: string } | null>(null);
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => readThemePreference());
   const [systemTheme, setSystemTheme] = useState<'light' | 'dark'>(() => resolveSystemTheme());
   const [lockTimeoutMinutes, setLockTimeoutMinutesState] = useState<LockTimeoutMinutes>(() => readLockTimeoutMinutes());
@@ -770,18 +770,10 @@ export default function App() {
       return;
     }
     try {
+      // Recovery spends the code and turns two-step login off; it does not create a session, so the
+      // only correct follow-up is to show the "please sign in again" state, not to log the user in.
       const recovered = await performRecoverTwoFactorLogin(email, password, recoveryCode, defaultKdfIterations);
-      if (recovered.login) {
-        await finalizeLogin(recovered.login);
-        if (recovered.newRecoveryCode) {
-          pushToast('success', t('txt_text_2fa_recovered_new_recovery_code_code', { code: recovered.newRecoveryCode }));
-        } else {
-          pushToast('success', t('txt_text_2fa_recovered'));
-        }
-        return;
-      }
-      pushToast('error', t('txt_recovered_but_auto_login_failed_please_sign_in'));
-      navigate('/login');
+      setRecoverResult({ newRecoveryCode: recovered.newRecoveryCode || '' });
     } catch (error) {
       pushToast('error', error instanceof Error ? error.message : t('txt_recover_2fa_failed'));
     }
@@ -1054,12 +1046,6 @@ export default function App() {
         onCancelTotp={() => {}}
         onUseRecoveryCode={() => {}}
         totpSubmitting={false}
-        disableTotpOpen={false}
-        disableTotpPassword=""
-        onDisableTotpPasswordChange={() => {}}
-        onConfirmDisableTotp={() => {}}
-        onCancelDisableTotp={() => {}}
-        disableTotpSubmitting={false}
       />
     );
   }
@@ -1909,11 +1895,6 @@ export default function App() {
     profile,
     session,
     defaultKdfIterations,
-    disableTotpPassword,
-    clearDisableTotpDialog: () => {
-      setDisableTotpOpen(false);
-      setDisableTotpPassword('');
-    },
     onLogoutNow: logoutNow,
     onNotify: pushToast,
     onProfileUpdated: setProfile,
@@ -2113,11 +2094,9 @@ export default function App() {
     sendUploadPercent: vaultSendActions.sendUploadPercent,
     onChangePassword: accountSecurityActions.changePassword,
     onSavePasswordHint: accountSecurityActions.savePasswordHint,
-    onEnableTotp: async (secret: string, token: string, masterPassword: string) => {
-      await accountSecurityActions.enableTotp(secret, token, masterPassword);
-      await twoFactorStatusQuery.refetch();
-    },
-    onOpenDisableTotp: () => setDisableTotpOpen(true),
+    onStartTotpSetup: accountSecurityActions.startTotpSetup,
+    onVerifyTotpSetup: accountSecurityActions.verifyTotpSetup,
+    onDisableTotp: accountSecurityActions.disableTotp,
     onGetYubiKeySettings: accountSecurityActions.getYubiKeySettings,
     onSaveYubiKeySettings: accountSecurityActions.saveYubiKeySettings,
     onSaveYubiKeyApiCredentials: accountSecurityActions.saveYubiKeyApiCredentials,
@@ -2263,6 +2242,25 @@ export default function App() {
   }
 
   if (isRecoverTwoFactorRoute && phase !== 'app') {
+    if (recoverResult) {
+      // The recovery code was accepted and two-step login is now off. No session was created, so
+      // show a clear "please sign in again" state instead of the recovery form.
+      return (
+        <>
+          <RecoverTwoFactorPage
+            recovered
+            newRecoveryCode={recoverResult.newRecoveryCode}
+            onSignIn={() => {
+              setRecoverResult(null);
+              setRecoverValues({ email: '', password: '', recoveryCode: '' });
+              setPhase('login');
+              navigate('/login');
+            }}
+          />
+          {renderPassiveOverlays()}
+        </>
+      );
+    }
     return (
       <>
         <RecoverTwoFactorPage
@@ -2367,12 +2365,6 @@ export default function App() {
             navigate('/recover-2fa');
           }}
           totpSubmitting={totpSubmitting}
-          disableTotpOpen={false}
-          disableTotpPassword=""
-          onDisableTotpPasswordChange={() => {}}
-          onConfirmDisableTotp={() => {}}
-          onCancelDisableTotp={() => {}}
-          disableTotpSubmitting={false}
         />
       </>
     );
@@ -2416,26 +2408,6 @@ export default function App() {
         onCancelTotp={() => {}}
         onUseRecoveryCode={() => {}}
         totpSubmitting={false}
-        disableTotpOpen={disableTotpOpen}
-        disableTotpPassword={disableTotpPassword}
-        onDisableTotpPasswordChange={setDisableTotpPassword}
-        onConfirmDisableTotp={() => {
-          if (disableTotpSubmitting) return;
-          void (async () => {
-            setDisableTotpSubmitting(true);
-            try {
-              await accountSecurityActions.disableTotp();
-            } finally {
-              setDisableTotpSubmitting(false);
-            }
-          })();
-        }}
-        onCancelDisableTotp={() => {
-          if (disableTotpSubmitting) return;
-          setDisableTotpOpen(false);
-          setDisableTotpPassword('');
-        }}
-        disableTotpSubmitting={disableTotpSubmitting}
       />
       <AuthRequestApprovalDialog
         open={authRequestDialogOpen}
