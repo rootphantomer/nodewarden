@@ -49,9 +49,9 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
 
   `CREATE TABLE IF NOT EXISTS \`domain_settings\` (
     user_id VARCHAR(191) NOT NULL,
-    equivalent_domains LONGTEXT NOT NULL DEFAULT '[]',
-    custom_equivalent_domains LONGTEXT NOT NULL DEFAULT '[]',
-    excluded_global_equivalent_domains LONGTEXT NOT NULL DEFAULT '[]',
+    equivalent_domains LONGTEXT NOT NULL DEFAULT ('[]'),
+    custom_equivalent_domains LONGTEXT NOT NULL DEFAULT ('[]'),
+    excluded_global_equivalent_domains LONGTEXT NOT NULL DEFAULT ('[]'),
     updated_at VARCHAR(64) NOT NULL,
     PRIMARY KEY (user_id),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
@@ -82,11 +82,11 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`id\`),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_ciphers_user_updated ON ciphers(user_id, updated_at)',
-  'CREATE INDEX IF NOT EXISTS idx_ciphers_user_archived ON ciphers(user_id, archived_at)',
-  'CREATE INDEX IF NOT EXISTS idx_ciphers_user_deleted ON ciphers(user_id, deleted_at)',
-  'CREATE INDEX IF NOT EXISTS idx_ciphers_user_deleted_updated ON ciphers(user_id, deleted_at, updated_at)',
-  'CREATE INDEX IF NOT EXISTS idx_ciphers_user_folder ON ciphers(user_id, folder_id)',
+  'CREATE INDEX idx_ciphers_user_updated ON ciphers(user_id, updated_at)',
+  'CREATE INDEX idx_ciphers_user_archived ON ciphers(user_id, archived_at)',
+  'CREATE INDEX idx_ciphers_user_deleted ON ciphers(user_id, deleted_at)',
+  'CREATE INDEX idx_ciphers_user_deleted_updated ON ciphers(user_id, deleted_at, updated_at)',
+  'CREATE INDEX idx_ciphers_user_folder ON ciphers(user_id, folder_id)',
 
   `CREATE TABLE IF NOT EXISTS \`folders\` (
     \`id\` VARCHAR(191) NOT NULL,
@@ -97,7 +97,7 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`id\`),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_folders_user_updated ON folders(user_id, updated_at)',
+  'CREATE INDEX idx_folders_user_updated ON folders(user_id, updated_at)',
 
   `CREATE TABLE IF NOT EXISTS \`attachments\` (
     \`id\` VARCHAR(191) NOT NULL,
@@ -109,7 +109,7 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`id\`),
     FOREIGN KEY (cipher_id) REFERENCES \`ciphers\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_attachments_cipher ON attachments(cipher_id)',
+  'CREATE INDEX idx_attachments_cipher ON attachments(cipher_id)',
 
   `CREATE TABLE IF NOT EXISTS \`sends\` (
     \`id\` VARCHAR(191) NOT NULL,
@@ -135,9 +135,9 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`id\`),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_sends_user_updated ON sends(user_id, updated_at)',
-  'CREATE INDEX IF NOT EXISTS idx_sends_user_deletion ON sends(user_id, deletion_date)',
-  'CREATE INDEX IF NOT EXISTS idx_sends_user_updated_id ON sends(user_id, updated_at, id)',
+  'CREATE INDEX idx_sends_user_updated ON sends(user_id, updated_at)',
+  'CREATE INDEX idx_sends_user_deletion ON sends(user_id, deletion_date)',
+  'CREATE INDEX idx_sends_user_updated_id ON sends(user_id, updated_at, id)',
 
   `CREATE TABLE IF NOT EXISTS \`refresh_tokens\` (
     \`token\` VARCHAR(255) NOT NULL,
@@ -153,7 +153,7 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`token\`),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user ON refresh_tokens(user_id)',
+  'CREATE INDEX idx_refresh_tokens_user ON refresh_tokens(user_id)',
 
   `CREATE TABLE IF NOT EXISTS \`invites\` (
     \`code\` VARCHAR(191) NOT NULL,
@@ -167,8 +167,8 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     FOREIGN KEY (created_by) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE,
     FOREIGN KEY (used_by) REFERENCES \`users\`(\`id\`) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_invites_status_expires ON invites(status, expires_at)',
-  'CREATE INDEX IF NOT EXISTS idx_invites_created_by ON invites(created_by, created_at)',
+  'CREATE INDEX idx_invites_status_expires ON invites(status, expires_at)',
+  'CREATE INDEX idx_invites_created_by ON invites(created_by, created_at)',
 
   `CREATE TABLE IF NOT EXISTS \`audit_logs\` (
     \`id\` VARCHAR(191) NOT NULL,
@@ -183,10 +183,10 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`id\`),
     FOREIGN KEY (actor_user_id) REFERENCES \`users\`(\`id\`) ON DELETE SET NULL
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_audit_logs_created_at ON audit_logs(created_at)',
-  'CREATE INDEX IF NOT EXISTS idx_audit_logs_actor_created ON audit_logs(actor_user_id, created_at)',
-  'CREATE INDEX IF NOT EXISTS idx_audit_logs_category_created ON audit_logs(category, created_at)',
-  'CREATE INDEX IF NOT EXISTS idx_audit_logs_level_created ON audit_logs(level, created_at)',
+  'CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at)',
+  'CREATE INDEX idx_audit_logs_actor_created ON audit_logs(actor_user_id, created_at)',
+  'CREATE INDEX idx_audit_logs_category_created ON audit_logs(category, created_at)',
+  'CREATE INDEX idx_audit_logs_level_created ON audit_logs(level, created_at)',
 
   `CREATE TABLE IF NOT EXISTS \`devices\` (
     user_id VARCHAR(191) NOT NULL,
@@ -208,9 +208,9 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (user_id, device_identifier),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_devices_user_updated ON devices(user_id, updated_at)',
-  'CREATE INDEX IF NOT EXISTS idx_devices_user_last_seen ON devices(user_id, last_seen_at)',
-  'CREATE INDEX IF NOT EXISTS idx_devices_user_push ON devices(user_id, push_token)',
+  'CREATE INDEX idx_devices_user_updated ON devices(user_id, updated_at)',
+  'CREATE INDEX idx_devices_user_last_seen ON devices(user_id, last_seen_at)',
+  'CREATE INDEX idx_devices_user_push ON devices(user_id, push_token(255))',
   "UPDATE refresh_tokens SET device_session_stamp = (SELECT devices.session_stamp FROM devices WHERE devices.user_id = refresh_tokens.user_id AND devices.device_identifier = refresh_tokens.device_identifier) WHERE device_identifier IS NOT NULL AND (device_session_stamp IS NULL OR device_session_stamp = '') AND EXISTS (SELECT 1 FROM devices WHERE devices.user_id = refresh_tokens.user_id AND devices.device_identifier = refresh_tokens.device_identifier)",
   "UPDATE refresh_tokens SET client_type = CASE WHEN EXISTS (SELECT 1 FROM devices WHERE devices.user_id = refresh_tokens.user_id AND devices.device_identifier = refresh_tokens.device_identifier AND devices.type IN (0, 1)) THEN 'mobile' WHEN EXISTS (SELECT 1 FROM devices WHERE devices.user_id = refresh_tokens.user_id AND devices.device_identifier = refresh_tokens.device_identifier AND devices.type = 14) THEN 'web' ELSE 'other' END WHERE client_type IS NULL OR client_type = ''",
 
@@ -235,9 +235,9 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`id\`),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_auth_requests_user_created ON auth_requests(user_id, creation_date)',
-  'CREATE INDEX IF NOT EXISTS idx_auth_requests_user_pending ON auth_requests(user_id, approved, response_date, authentication_date, creation_date)',
-  'CREATE INDEX IF NOT EXISTS idx_auth_requests_device_pending ON auth_requests(user_id, request_device_identifier, creation_date)',
+  'CREATE INDEX idx_auth_requests_user_created ON auth_requests(user_id, creation_date)',
+  'CREATE INDEX idx_auth_requests_user_pending ON auth_requests(user_id, approved, response_date, authentication_date, creation_date)',
+  'CREATE INDEX idx_auth_requests_device_pending ON auth_requests(user_id, request_device_identifier, creation_date)',
 
   `CREATE TABLE IF NOT EXISTS \`trusted_two_factor_device_tokens\` (
     \`token\` VARCHAR(255) NOT NULL,
@@ -247,7 +247,7 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`token\`),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_trusted_two_factor_device_tokens_user_device ON trusted_two_factor_device_tokens(user_id, device_identifier)',
+  'CREATE INDEX idx_trusted_two_factor_device_tokens_user_device ON trusted_two_factor_device_tokens(user_id, device_identifier)',
 
   `CREATE TABLE IF NOT EXISTS \`totp_login_replays\` (
     user_id VARCHAR(191) NOT NULL,
@@ -256,7 +256,7 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (user_id, time_counter),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_totp_login_replays_consumed_at ON totp_login_replays(consumed_at)',
+  'CREATE INDEX idx_totp_login_replays_consumed_at ON totp_login_replays(consumed_at)',
 
   `CREATE TABLE IF NOT EXISTS \`webauthn_credentials\` (
     \`id\` VARCHAR(191) NOT NULL,
@@ -278,9 +278,9 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     PRIMARY KEY (\`id\`),
     FOREIGN KEY (user_id) REFERENCES \`users\`(\`id\`) ON DELETE CASCADE
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE UNIQUE INDEX IF NOT EXISTS idx_webauthn_credentials_credential_id ON webauthn_credentials(credential_id)',
-  'CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user ON webauthn_credentials(user_id)',
-  'CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user_updated ON webauthn_credentials(user_id, updated_at)',
+  'CREATE UNIQUE INDEX idx_webauthn_credentials_credential_id ON webauthn_credentials(credential_id(255))',
+  'CREATE INDEX idx_webauthn_credentials_user ON webauthn_credentials(user_id)',
+  'CREATE INDEX idx_webauthn_credentials_user_updated ON webauthn_credentials(user_id, updated_at)',
 
   `CREATE TABLE IF NOT EXISTS \`webauthn_challenges\` (
     challenge_hash VARCHAR(191) NOT NULL,
@@ -291,8 +291,8 @@ export const MYSQL_SCHEMA_STATEMENTS: readonly string[] = [
     created_at BIGINT NOT NULL,
     PRIMARY KEY (challenge_hash)
   ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`,
-  'CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires ON webauthn_challenges(expires_at)',
-  'CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_user_scope ON webauthn_challenges(user_id, scope)',
+  'CREATE INDEX idx_webauthn_challenges_expires ON webauthn_challenges(expires_at)',
+  'CREATE INDEX idx_webauthn_challenges_user_scope ON webauthn_challenges(user_id, scope(255))',
 
   `CREATE TABLE IF NOT EXISTS \`login_attempts_ip\` (
     ip VARCHAR(191) NOT NULL,
@@ -320,7 +320,10 @@ export async function ensureMysqlStorageSchema(db: SqlDatabase): Promise<void> {
       await db.prepare(statement).run();
     } catch (error) {
       const msg = error instanceof Error ? error.message.toLowerCase() : String(error).toLowerCase();
-      if (msg.includes('already exists') || msg.includes('duplicate column name')) continue;
+      // MySQL has no CREATE INDEX IF NOT EXISTS; re-runs surface an existing
+      // index as "duplicate key name" — treat it like the sqlite-side
+      // 'already exists' tolerance for schema idempotency.
+      if (msg.includes('already exists') || msg.includes('duplicate column name') || msg.includes('duplicate key name')) continue;
       throw error;
     }
   }

@@ -67,6 +67,58 @@ class MysqlStatement implements SqlStatement {
 
 // ---- database ---------------------------------------------------------------
 
+type MysqlCreateIndexTranslation = Extract<
+  MysqlStatementTranslation,
+  { kind: 'create-index' }
+>;
+
+/**
+ * MySQL cannot express `CREATE INDEX IF NOT EXISTS`; the statement probes
+ * INFORMATION_SCHEMA.STATISTICS for the index and only creates it when
+ * absent, keeping both the schema bootstrap and repository ensure calls
+ * idempotent across restarts.
+ */
+class MysqlCreateIndexStatement implements SqlStatement {
+  constructor(
+    private readonly database: MysqlDatabase,
+    private readonly translation: MysqlCreateIndexTranslation
+  ) {}
+
+  bind(...values: unknown[]): SqlStatement {
+    if (values.length) {
+      throw new Error('CREATE INDEX statements do not take bindings');
+    }
+    return this;
+  }
+
+  async first(): Promise<null> {
+    return null;
+  }
+
+  async all<T>(): Promise<SqlQueryResult<T[]>> {
+    await this.run();
+    return { results: [], success: true, meta: { changes: 0 } };
+  }
+
+  async run(): Promise<SqlQueryResult<Record<string, any>[]>> {
+    const pool = await this.database.getPool();
+    const [existing] = await pool.query(
+      'SELECT 1 FROM INFORMATION_SCHEMA.STATISTICS ' +
+      'WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1',
+      [this.translation.tableName, this.translation.indexName]
+    );
+    if (Array.isArray(existing) && existing.length > 0) {
+      return { results: [], success: true, meta: { changes: 0 } };
+    }
+    const [outcome] = await pool.query(this.translation.sql);
+    return {
+      results: [],
+      success: true,
+      meta: { changes: (outcome as { affectedRows?: number }).affectedRows ?? 0 },
+    };
+  }
+}
+
 export class MysqlDatabase implements SqlDatabase {
   readonly engine = 'mysql' as const;
 
@@ -82,6 +134,9 @@ export class MysqlDatabase implements SqlDatabase {
     if (translation.kind === 'noop') {
       // Statements with no MySQL counterpart (e.g. PRAGMA foreign_keys): treat as success.
       return new MysqlStatement(this, '', []);
+    }
+    if (translation.kind === 'create-index') {
+      return new MysqlCreateIndexStatement(this, translation as MysqlCreateIndexTranslation);
     }
     return new MysqlStatement(this, translation.sql, []);
   }
@@ -141,6 +196,16 @@ export class MysqlDatabase implements SqlDatabase {
   /** Raw pool handle, for callers that need to run session-level SQL. */
   async getPool(): Promise<any> {
     if (!this.poolPromise) {
+      // Pools are cached per connection URI at module level: platform bootstraps
+      // (e.g. the EdgeOne entry) construct a fresh `MysqlDatabase` per request,
+      // and mysql2 pools must be reused across them or connections would
+      // multiply with every invocation.
+      const cacheKey = `${this.options.connectionUri}|${this.options.poolLimit ?? 5}`;
+      const cached = getPoolCache().get(cacheKey);
+      if (cached) {
+        this.poolPromise = cached;
+        return this.poolPromise;
+      }
       this.poolPromise = (async () => {
         const mysql = await loadMysqlModule();
         return mysql.createPool({
@@ -153,9 +218,16 @@ export class MysqlDatabase implements SqlDatabase {
           namedPlaceholders: false,
         });
       })();
+      getPoolCache().set(cacheKey, this.poolPromise);
     }
     return this.poolPromise;
   }
+}
+
+let poolCache: Map<string, Promise<any>> | null = null;
+function getPoolCache(): Map<string, Promise<any>> {
+  if (!poolCache) poolCache = new Map();
+  return poolCache;
 }
 
 export function createMysqlDatabase(options: MysqlDatabaseOptions): MysqlDatabase {

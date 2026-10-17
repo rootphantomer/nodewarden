@@ -34,13 +34,56 @@ function buildSyncCacheRequest(
   return new Request(cacheUrl.toString(), { method: 'GET' });
 }
 
+/**
+ * Sync payload cache. Cloudflare: `caches.default` (edge cache object).
+ * Runtimes without the Cache API (EdgeOne Node functions): an in-memory
+ * keyed map with the same contract — bounded in size and entry age so
+ * long-lived Node isolates cannot grow unbounded.
+ */
+const SYNC_CACHE_MAX_ENTRIES = 100;
+const SYNC_CACHE_ENTRY_TTL_MS = 60 * 1000;
+interface SyncCacheEntry {
+  status: number;
+  headers: Array<[string, string]>;
+  bytes: ArrayBuffer;
+  expiresAtMs: number;
+}
+const inMemorySyncCache = new Map<string, SyncCacheEntry>();
+
 async function readSyncCache(cacheRequest: Request): Promise<Response | null> {
+  if (typeof (globalThis as { caches?: unknown }).caches === 'undefined') {
+    const key = cacheRequest.url;
+    const entry = inMemorySyncCache.get(key);
+    if (!entry) return null;
+    if (entry.expiresAtMs <= Date.now()) {
+      inMemorySyncCache.delete(key);
+      return null;
+    }
+    return new Response(entry.bytes, {
+      status: entry.status,
+      headers: new Headers(entry.headers),
+    });
+  }
   const hit = await caches.default.match(cacheRequest);
   if (!hit) return null;
   return new Response(hit.body, hit);
 }
 
 async function writeSyncCache(cacheRequest: Request, response: Response): Promise<void> {
+  if (typeof (globalThis as { caches?: unknown }).caches === 'undefined') {
+    if (inMemorySyncCache.size >= SYNC_CACHE_MAX_ENTRIES) {
+      const oldest = inMemorySyncCache.keys().next().value;
+      if (oldest) inMemorySyncCache.delete(oldest);
+    }
+    const bytes = await response.clone().arrayBuffer();
+    inMemorySyncCache.set(cacheRequest.url, {
+      status: response.status,
+      headers: Array.from(response.headers.entries()),
+      bytes,
+      expiresAtMs: Date.now() + SYNC_CACHE_ENTRY_TTL_MS,
+    });
+    return;
+  }
   await caches.default.put(cacheRequest, response.clone());
 }
 

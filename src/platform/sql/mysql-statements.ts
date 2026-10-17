@@ -1,7 +1,7 @@
 import { translateSqliteToMysql } from './translate-sqlite';
 
 /**
- * Statement-level dispatch for the MySQL backend. Most statements pass
+ * Statement-Level dispatch for the MySQL backend. Most statements pass
  * through the SQLite→MySQL translator; the handful of SQLite-only
  * statements (PRAGMA, sqlite_master) are rewritten to their MySQL
  * equivalents so the repository code keeps working unchanged.
@@ -10,6 +10,7 @@ import { translateSqliteToMysql } from './translate-sqlite';
 export type MysqlStatementTranslation =
   | { kind: 'pass'; sql: string }
   | { kind: 'noop' }
+  | { kind: 'create-index'; indexName: string; tableName: string; sql: string }
   | { kind: 'unsupported'; reason: string };
 
 const WELL_KNOWN_DDL = new Map<string, string>([
@@ -32,6 +33,9 @@ const SQLITE_MASTER_IN_RE =
 
 const TABLE_INFO_RE =
   /^\s*PRAGMA\s+table_info\s*\(\s*"?([A-Za-z_][A-Za-z0-9_]*)"?\s*\)/i;
+
+const CREATE_INDEX_RE =
+  /^\s*CREATE\s+(UNIQUE\s+)?INDEX\s+(?:IF\s+NOT\s+EXISTS\s+)?([A-Za-z_][A-Za-z0-9_]*)\s+ON\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([\s\S]*)\)\s*$/i;
 
 export function translateStatementForMysql(sql: string): MysqlStatementTranslation {
   if (/^\s*PRAGMA\s+foreign_keys/i.test(sql)) {
@@ -70,6 +74,22 @@ export function translateStatementForMysql(sql: string): MysqlStatementTranslati
   const wellKnown = WELL_KNOWN_DDL.get(normalizeWhitespace(sql));
   if (wellKnown) {
     return { kind: 'pass', sql: wellKnown };
+  }
+
+  // MySQL has no CREATE INDEX IF NOT EXISTS; index creation is probed at
+  // execution time (INFORMATION_SCHEMA.STATISTICS) so schema bootstrap and
+  // per-repo ensure calls stay idempotent.
+  const createIndex = CREATE_INDEX_RE.exec(sql);
+  if (createIndex) {
+    const unique = createIndex[1] ? 'UNIQUE ' : '';
+    const [, , indexName, tableName, columns] = createIndex;
+    const normalizedColumns = columns.replace(/\s+/g, ' ').trim();
+    return {
+      kind: 'create-index',
+      indexName,
+      tableName,
+      sql: `CREATE ${unique}INDEX ${indexName} ON ${tableName} (${normalizedColumns})`,
+    };
   }
 
   return { kind: 'pass', sql: translateSqliteToMysql(sql) };

@@ -53,8 +53,9 @@ test('conditional upsert folds WHERE into IF per assignment (folders)', () => {
     'ON CONFLICT(id) DO UPDATE SET name=excluded.name, updated_at=excluded.updated_at WHERE user_id=excluded.user_id';
   const out = translateUpsert(input);
   assert.match(out, /VALUES\(\?, \?, \?, \?, \?\) AS new ON DUPLICATE KEY UPDATE/);
-  assert.match(out, /name\s*=\s*IF\(user_id\s*=\s*new\.user_id,\s*new\.name,\s*name\)/);
-  assert.match(out, /updated_at\s*=\s*IF\(user_id\s*=\s*new\.user_id,\s*new\.updated_at,\s*updated_at\)/);
+  // MySQL aliased upserts require table-qualified references to the existing row
+  assert.match(out, /folders\.name\s*=\s*IF\(folders\.user_id\s*=\s*new\.user_id,\s*new\.name,\s*folders\.name\)/);
+  assert.match(out, /folders\.updated_at\s*=\s*IF\(folders\.user_id\s*=\s*new\.user_id,\s*new\.updated_at,\s*folders\.updated_at\)/);
   assert.doesNotMatch(out, / WHERE /);
 });
 
@@ -69,8 +70,8 @@ test('conditional upsert keeps subquery in condition (attachments)', () => {
   const out = translateUpsert(input);
   assert.match(out, /AS new ON DUPLICATE KEY UPDATE/);
   // condition folded into each assignment, alias applied inside the subquery
-  assert.match(out, /cipher_id = IF\(EXISTS \(SELECT 1 FROM ciphers current_cipher INNER JOIN ciphers next_cipher ON next_cipher\.id = new\.cipher_id WHERE current_cipher\.id = attachments\.cipher_id AND current_cipher\.user_id = next_cipher\.user_id\), new\.cipher_id, cipher_id\)/);
-  assert.match(out, /key = IF\(EXISTS/, 'key assignment also wrapped');
+  assert.match(out, /attachments\.cipher_id = IF\(EXISTS \(SELECT 1 FROM ciphers current_cipher INNER JOIN ciphers next_cipher ON next_cipher\.id = new\.cipher_id WHERE current_cipher\.id = attachments\.cipher_id AND current_cipher\.user_id = next_cipher\.user_id\), new\.cipher_id, attachments\.cipher_id\)/);
+  assert.match(out, /attachments\.key = IF\(EXISTS/, 'key assignment also wrapped');
 });
 
 test('upsert with CASE expression and no WHERE (devices)', () => {
@@ -81,15 +82,18 @@ test('upsert with CASE expression and no WHERE (devices)', () => {
     'encrypted_user_key=COALESCE(excluded.encrypted_user_key, encrypted_user_key), ' +
     'push_uuid=COALESCE(push_uuid, excluded.push_uuid)';
   const out = translateUpsert(input);
-  assert.match(out, /ON DUPLICATE KEY UPDATE name\s*=\s*new\.name,\s*type\s*=\s*new\.type,/);
-  assert.match(out, /session_stamp\s*=\s*CASE WHEN devices\.session_stamp IS NULL OR devices\.session_stamp = \? THEN new\.session_stamp ELSE devices\.session_stamp END/);
-  assert.match(out, /push_uuid\s*=\s*COALESCE\(push_uuid, new\.push_uuid\)/);
+  assert.match(out, /ON DUPLICATE KEY UPDATE devices\.name\s*=\s*new\.name,\s*devices\.type\s*=\s*new\.type,/);
+  assert.match(out, /devices\.session_stamp\s*=\s*CASE WHEN devices\.session_stamp IS NULL OR devices\.session_stamp = \? THEN new\.session_stamp ELSE devices\.session_stamp END/);
+  assert.match(out, /devices\.push_uuid\s*=\s*COALESCE\(devices\.push_uuid, new\.push_uuid\)/);
 });
 
 test('ON CONFLICT DO NOTHING becomes no-op self-assignment', () => {
   const input = 'INSERT INTO used_attachment_download_tokens(jti, expires_at) VALUES(?, ?) ON CONFLICT(jti) DO NOTHING';
   const out = translateUpsert(input);
-  assert.match(out, /VALUES\(\?, \?\) AS new ON DUPLICATE KEY UPDATE `jti` = `jti`/);
+  assert.match(
+    out,
+    /ON DUPLICATE KEY UPDATE used_attachment_download_tokens\.`jti` = used_attachment_download_tokens\.`jti`|ON DUPLICATE KEY UPDATE `jti` = new\.`jti`/
+  );
 });
 
 test('counter upsert keeps self-increment (login_attempts_ip)', () => {
@@ -97,7 +101,7 @@ test('counter upsert keeps self-increment (login_attempts_ip)', () => {
     "INSERT INTO login_attempts_ip(ip, attempts, locked_until, updated_at) VALUES(?, 1, NULL, ?) " +
     'ON CONFLICT(ip) DO UPDATE SET attempts = attempts + 1, updated_at = excluded.updated_at';
   const out = translateUpsert(input);
-  assert.match(out, /AS new ON DUPLICATE KEY UPDATE attempts = attempts \+ 1, updated_at = new\.updated_at/);
+  assert.match(out, /AS new ON DUPLICATE KEY UPDATE login_attempts_ip\.attempts = login_attempts_ip\.attempts \+ 1, login_attempts_ip\.updated_at = new\.updated_at/);
 });
 
 test('reserved identifiers in ordinary statements are quoted', () => {
@@ -115,7 +119,7 @@ test('ON DUPLICATE KEY UPDATE phrase is never quoted as an identifier', () => {
   const out = translateSqliteToMysql(
     'INSERT INTO config(key, value) VALUES(?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   );
-  assert.match(out, /ON DUPLICATE KEY UPDATE `value` = new\.`value`/);
+  assert.match(out, /ON DUPLICATE KEY UPDATE config\.`value` = new\.`value`/);
 });
 
 test('PRAGMA table_info is translated to INFORMATION_SCHEMA', () => {
@@ -145,7 +149,7 @@ test('job lease upsert keeps the CAS guard and parses CAST AS SIGNED', () => {
   assert.equal(out.kind, 'pass');
   if (out.kind === 'pass') {
     assert.match(out.sql, /AS new ON DUPLICATE KEY UPDATE/);
-    assert.match(out.sql, /CAST\(`value` AS SIGNED\) < \?/);
+    assert.match(out.sql, /CAST\(config\.`value` AS SIGNED\) < \?/);
     assert.doesNotMatch(out.sql, /AS INTEGER/);
     // Four question marks: VALUES(?, ?) + SET value = ? + guard < ?
     assert.equal((out.sql.match(/\?/g) || []).length, 4);

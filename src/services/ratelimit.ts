@@ -1,6 +1,42 @@
 import { LIMITS } from '../config/limits';
 import { type SqlDatabase, type SqlStatement } from '../platform';
 
+/**
+ * Isolate-local fallback for the Cache API-backed fixed-window limiter on
+ * runtimes without `caches` (EdgeOne Node functions, unit tests). Entries
+ * are evicted when their window expires; count keying matches the cache
+ * path layout (`identifier|windowStart`) so switching between the cache
+ * and memory backends cannot mix state.
+ */
+const inMemoryFixedWindow = new Map<string, { count: number; expiresAtMs: number }>();
+
+function consumeInMemoryFixedWindow(
+  identifier: string,
+  windowStart: number,
+  ttlSeconds: number,
+  maxRequests: number
+): { allowed: boolean; remaining: number; retryAfterSeconds?: number } {
+  const key = `${identifier}|${windowStart}`;
+  const nowMs = Date.now();
+  const entry = inMemoryFixedWindow.get(key);
+  const count = (entry && entry.expiresAtMs > nowMs ? entry.count : 0);
+
+  if (count >= maxRequests) {
+    return { allowed: false, remaining: 0, retryAfterSeconds: ttlSeconds };
+  }
+
+  inMemoryFixedWindow.set(key, { count: count + 1, expiresAtMs: nowMs + ttlSeconds * 1000 });
+
+  // Lazy sweep keeps memory bounded without a timer.
+  if (inMemoryFixedWindow.size > 10_000) {
+    for (const [k, v] of inMemoryFixedWindow) {
+      if (v.expiresAtMs <= nowMs) inMemoryFixedWindow.delete(k);
+    }
+  }
+
+  return { allowed: true, remaining: Math.max(0, maxRequests - count - 1) };
+}
+
 // Rate limiting service.
 // - Login attempts: D1-backed (low volume, security-critical, needs cross-colo persistence).
 // - API budgets: Cloudflare Cache API (high volume, auto-expires, zero D1 writes).
@@ -174,6 +210,8 @@ export class RateLimitService {
   // Cache API-backed fixed-window rate limiter.
   // Uses Cloudflare edge cache instead of D1 — zero database writes, auto-expires via TTL.
   // Per-colo isolation is acceptable (matches Cloudflare's own rate limiting behaviour).
+  // On runtimes without the Cache API (EdgeOne Node functions, tests) an
+  // in-memory TTL map takes over: same semantics, isolate-local scope.
   private async consumeFixedWindowBudget(
     identifier: string,
     maxRequests: number,
@@ -183,6 +221,10 @@ export class RateLimitService {
     const windowStart = nowSec - (nowSec % windowSeconds);
     const windowEnd = windowStart + windowSeconds;
     const ttl = Math.max(1, windowEnd - nowSec);
+
+    if (typeof (globalThis as { caches?: unknown }).caches === 'undefined') {
+      return consumeInMemoryFixedWindow(identifier, windowStart, ttl, maxRequests);
+    }
 
     const cache = await caches.open('rate-limit');
     const cacheKey = new Request(`https://rl/${identifier}/${windowStart}`);
