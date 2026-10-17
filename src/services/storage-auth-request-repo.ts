@@ -1,4 +1,5 @@
 import type { AuthRequestRecord, AuthRequestType } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
 const AUTH_REQUEST_EXPIRATION_MS = 15 * 60 * 1000;
 
@@ -33,7 +34,7 @@ const AUTH_REQUEST_SELECT =
   'response_device_identifier, access_code, public_key, key, master_password_hash, approved, creation_date, response_date, authentication_date ' +
   'FROM auth_requests';
 
-export async function createAuthRequest(db: D1Database, request: AuthRequestRecord): Promise<void> {
+export async function createAuthRequest(db: SqlDatabase, request: AuthRequestRecord): Promise<void> {
   await db
     .prepare(
       'INSERT INTO auth_requests(' +
@@ -63,22 +64,22 @@ export async function createAuthRequest(db: D1Database, request: AuthRequestReco
     .run();
 }
 
-export async function getAuthRequestById(db: D1Database, id: string): Promise<AuthRequestRecord | null> {
+export async function getAuthRequestById(db: SqlDatabase, id: string): Promise<AuthRequestRecord | null> {
   const row = await db.prepare(`${AUTH_REQUEST_SELECT} WHERE id = ? LIMIT 1`).bind(id).first<any>();
   return row ? mapAuthRequestRow(row) : null;
 }
 
-export async function getAuthRequestByIdForUser(db: D1Database, id: string, userId: string): Promise<AuthRequestRecord | null> {
+export async function getAuthRequestByIdForUser(db: SqlDatabase, id: string, userId: string): Promise<AuthRequestRecord | null> {
   const row = await db.prepare(`${AUTH_REQUEST_SELECT} WHERE id = ? AND user_id = ? LIMIT 1`).bind(id, userId).first<any>();
   return row ? mapAuthRequestRow(row) : null;
 }
 
-export async function listAuthRequestsByUserId(db: D1Database, userId: string): Promise<AuthRequestRecord[]> {
+export async function listAuthRequestsByUserId(db: SqlDatabase, userId: string): Promise<AuthRequestRecord[]> {
   const res = await db.prepare(`${AUTH_REQUEST_SELECT} WHERE user_id = ? ORDER BY creation_date DESC`).bind(userId).all<any>();
   return (res.results || []).map(mapAuthRequestRow);
 }
 
-export async function listPendingAuthRequestsByUserId(db: D1Database, userId: string, nowMs: number = Date.now()): Promise<AuthRequestRecord[]> {
+export async function listPendingAuthRequestsByUserId(db: SqlDatabase, userId: string, nowMs: number = Date.now()): Promise<AuthRequestRecord[]> {
   const cutoff = new Date(nowMs - AUTH_REQUEST_EXPIRATION_MS).toISOString();
   const res = await db
     .prepare(
@@ -100,7 +101,7 @@ export async function listPendingAuthRequestsByUserId(db: D1Database, userId: st
 }
 
 export async function updateAuthRequestResponse(
-  db: D1Database,
+  db: SqlDatabase,
   id: string,
   userId: string,
   update: {
@@ -129,7 +130,7 @@ export async function updateAuthRequestResponse(
   return Number(result.meta.changes ?? 0) > 0;
 }
 
-export async function markAuthRequestAuthenticated(db: D1Database, id: string, authenticationDate: string = new Date().toISOString()): Promise<boolean> {
+export async function markAuthRequestAuthenticated(db: SqlDatabase, id: string, authenticationDate: string = new Date().toISOString()): Promise<boolean> {
   const result = await db
     .prepare('UPDATE auth_requests SET authentication_date = ? WHERE id = ? AND authentication_date IS NULL')
     .bind(authenticationDate, id)
@@ -137,7 +138,7 @@ export async function markAuthRequestAuthenticated(db: D1Database, id: string, a
   return Number(result.meta.changes ?? 0) > 0;
 }
 
-export async function pruneExpiredAuthRequests(db: D1Database, nowMs: number = Date.now()): Promise<number> {
+export async function pruneExpiredAuthRequests(db: SqlDatabase, nowMs: number = Date.now()): Promise<number> {
   const cutoff = new Date(nowMs - AUTH_REQUEST_EXPIRATION_MS).toISOString();
   const result = await db.prepare('DELETE FROM auth_requests WHERE creation_date < ?').bind(cutoff).run();
   return Number(result.meta.changes ?? 0);

@@ -1,4 +1,5 @@
 import { zipSync, unzipSync, type UnzipFileInfo } from 'fflate';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 import type { Env } from '../types';
 import { APP_VERSION } from '../../shared/app-version';
 import { BACKUP_SETTINGS_CONFIG_KEY } from './backup-config';
@@ -104,7 +105,7 @@ export interface BackupArchiveBuildProgressEvent {
 
 export type BackupArchiveBuildProgressReporter = (event: BackupArchiveBuildProgressEvent) => Promise<void>;
 
-async function queryRows(db: D1Database, sql: string, ...values: unknown[]): Promise<SqlRow[]> {
+async function queryRows(db: SqlDatabase, sql: string, ...values: unknown[]): Promise<SqlRow[]> {
   const result = await db.prepare(sql).bind(...values).all<SqlRow>();
   return (result.results || []).map((row) => ({ ...row }));
 }

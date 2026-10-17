@@ -1,10 +1,11 @@
 import type { RefreshTokenRecord } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
 type RefreshTokenKeyFn = (token: string) => Promise<string>;
 type CleanupExpiredFn = (nowMs: number) => Promise<void>;
 
 export async function saveRefreshToken(
-  db: D1Database,
+  db: SqlDatabase,
   refreshTokenKey: RefreshTokenKeyFn,
   maybeCleanupExpiredRefreshTokens: CleanupExpiredFn,
   token: string,
@@ -43,7 +44,7 @@ export async function saveRefreshToken(
 }
 
 export async function getRefreshTokenRecord(
-  db: D1Database,
+  db: SqlDatabase,
   refreshTokenKey: RefreshTokenKeyFn,
   maybeCleanupExpiredRefreshTokens: CleanupExpiredFn,
   deleteRefreshTokenRecord: (token: string) => Promise<void>,
@@ -90,7 +91,7 @@ export async function getRefreshTokenRecord(
 }
 
 export async function extendRefreshTokenExpiry(
-  db: D1Database,
+  db: SqlDatabase,
   refreshTokenKey: RefreshTokenKeyFn,
   token: string,
   requestedExpiresAtMs: number,
@@ -112,7 +113,7 @@ export async function extendRefreshTokenExpiry(
 }
 
 export async function bindRefreshTokenSecurityStamp(
-  db: D1Database,
+  db: SqlDatabase,
   refreshTokenKey: RefreshTokenKeyFn,
   token: string,
   securityStamp: string
@@ -125,7 +126,7 @@ export async function bindRefreshTokenSecurityStamp(
 }
 
 export async function bindRefreshTokenDeviceStamp(
-  db: D1Database,
+  db: SqlDatabase,
   refreshTokenKey: RefreshTokenKeyFn,
   token: string,
   deviceSessionStamp: string
@@ -137,18 +138,18 @@ export async function bindRefreshTokenDeviceStamp(
     .run();
 }
 
-export async function deleteRefreshToken(db: D1Database, refreshTokenKey: RefreshTokenKeyFn, token: string): Promise<void> {
+export async function deleteRefreshToken(db: SqlDatabase, refreshTokenKey: RefreshTokenKeyFn, token: string): Promise<void> {
   const tokenKey = await refreshTokenKey(token);
   await db.prepare('DELETE FROM refresh_tokens WHERE token = ?').bind(token).run();
   await db.prepare('DELETE FROM refresh_tokens WHERE token = ?').bind(tokenKey).run();
 }
 
-export async function deleteRefreshTokensByUserId(db: D1Database, userId: string): Promise<number> {
+export async function deleteRefreshTokensByUserId(db: SqlDatabase, userId: string): Promise<number> {
   const result = await db.prepare('DELETE FROM refresh_tokens WHERE user_id = ?').bind(userId).run();
   return Number(result.meta.changes ?? 0);
 }
 
-export async function deleteRefreshTokensByDevice(db: D1Database, userId: string, deviceIdentifier: string): Promise<number> {
+export async function deleteRefreshTokensByDevice(db: SqlDatabase, userId: string, deviceIdentifier: string): Promise<number> {
   const result = await db
     .prepare('DELETE FROM refresh_tokens WHERE user_id = ? AND device_identifier = ?')
     .bind(userId, deviceIdentifier)

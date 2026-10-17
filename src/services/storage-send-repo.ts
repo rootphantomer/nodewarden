@@ -1,6 +1,7 @@
 import type { Send } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
-type SafeBind = (stmt: D1PreparedStatement, ...values: any[]) => D1PreparedStatement;
+type SafeBind = (stmt: SqlStatement, ...values: any[]) => SqlStatement;
 type SqlChunkSize = (fixedBindCount: number) => number;
 type UpdateRevisionDate = (userId: string) => Promise<string>;
 
@@ -29,7 +30,7 @@ function mapSendRow(row: any): Send {
   };
 }
 
-export async function getSend(db: D1Database, id: string): Promise<Send | null> {
+export async function getSend(db: SqlDatabase, id: string): Promise<Send | null> {
   const row = await db
     .prepare(
       'SELECT id, user_id, type, name, notes, data, key, password_hash, password_salt, password_iterations, auth_type, emails, max_access_count, access_count, disabled, hide_email, created_at, updated_at, expiration_date, deletion_date FROM sends WHERE id = ?'
@@ -40,7 +41,7 @@ export async function getSend(db: D1Database, id: string): Promise<Send | null> 
   return mapSendRow(row);
 }
 
-export async function getSendForUser(db: D1Database, id: string, userId: string): Promise<Send | null> {
+export async function getSendForUser(db: SqlDatabase, id: string, userId: string): Promise<Send | null> {
   const row = await db
     .prepare(
       'SELECT id, user_id, type, name, notes, data, key, password_hash, password_salt, password_iterations, auth_type, emails, max_access_count, access_count, disabled, hide_email, created_at, updated_at, expiration_date, deletion_date FROM sends WHERE id = ? AND user_id = ?'
@@ -51,7 +52,7 @@ export async function getSendForUser(db: D1Database, id: string, userId: string)
   return mapSendRow(row);
 }
 
-export async function saveSend(db: D1Database, safeBind: SafeBind, send: Send): Promise<void> {
+export async function saveSend(db: SqlDatabase, safeBind: SafeBind, send: Send): Promise<void> {
   const stmt = db.prepare(
     'INSERT INTO sends(id, user_id, type, name, notes, data, key, password_hash, password_salt, password_iterations, auth_type, emails, max_access_count, access_count, disabled, hide_email, created_at, updated_at, expiration_date, deletion_date) ' +
     'VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
@@ -88,7 +89,7 @@ export async function saveSend(db: D1Database, safeBind: SafeBind, send: Send): 
   ).run();
 }
 
-export async function incrementSendAccessCount(db: D1Database, sendId: string): Promise<boolean> {
+export async function incrementSendAccessCount(db: SqlDatabase, sendId: string): Promise<boolean> {
   const now = new Date().toISOString();
   const result = await db
     .prepare(
@@ -104,12 +105,12 @@ export async function incrementSendAccessCount(db: D1Database, sendId: string): 
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function deleteSend(db: D1Database, id: string, userId: string): Promise<void> {
+export async function deleteSend(db: SqlDatabase, id: string, userId: string): Promise<void> {
   await db.prepare('DELETE FROM sends WHERE id = ? AND user_id = ?').bind(id, userId).run();
 }
 
 export async function getSendsByIds(
-  db: D1Database,
+  db: SqlDatabase,
   sqlChunkSize: SqlChunkSize,
   ids: string[],
   userId: string
@@ -138,7 +139,7 @@ export async function getSendsByIds(
 }
 
 export async function bulkDeleteSends(
-  db: D1Database,
+  db: SqlDatabase,
   sqlChunkSize: SqlChunkSize,
   updateRevisionDate: UpdateRevisionDate,
   ids: string[],
@@ -158,7 +159,7 @@ export async function bulkDeleteSends(
   return updateRevisionDate(userId);
 }
 
-export async function getAllSends(db: D1Database, userId: string): Promise<Send[]> {
+export async function getAllSends(db: SqlDatabase, userId: string): Promise<Send[]> {
   const res = await db
     .prepare(
       'SELECT id, user_id, type, name, notes, data, key, password_hash, password_salt, password_iterations, auth_type, emails, max_access_count, access_count, disabled, hide_email, created_at, updated_at, expiration_date, deletion_date FROM sends WHERE user_id = ? ORDER BY updated_at DESC'
@@ -168,7 +169,7 @@ export async function getAllSends(db: D1Database, userId: string): Promise<Send[
   return (res.results || []).map((row) => mapSendRow(row));
 }
 
-export async function getSendsPage(db: D1Database, userId: string, limit: number, offset: number): Promise<Send[]> {
+export async function getSendsPage(db: SqlDatabase, userId: string, limit: number, offset: number): Promise<Send[]> {
   const res = await db
     .prepare(
       'SELECT id, user_id, type, name, notes, data, key, password_hash, password_salt, password_iterations, auth_type, emails, max_access_count, access_count, disabled, hide_email, created_at, updated_at, expiration_date, deletion_date FROM sends WHERE user_id = ? ORDER BY updated_at DESC LIMIT ? OFFSET ?'

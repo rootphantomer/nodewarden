@@ -1,4 +1,5 @@
 import type { Device, TrustedDeviceTokenSummary, User } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 import { generateUUID } from '../utils/uuid';
 
 type GetUserByEmail = (email: string) => Promise<User | null>;
@@ -24,7 +25,7 @@ function mapDeviceRow(row: any): Device {
 }
 
 export async function upsertDevice(
-  db: D1Database,
+  db: SqlDatabase,
   getDeviceById: (userId: string, deviceIdentifier: string) => Promise<Device | null>,
   userId: string,
   deviceIdentifier: string,
@@ -74,7 +75,7 @@ export async function upsertDevice(
 }
 
 export async function updateDeviceName(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string,
   name: string
@@ -87,7 +88,7 @@ export async function updateDeviceName(
 }
 
 export async function touchDeviceLastSeen(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string
 ): Promise<boolean> {
@@ -100,7 +101,7 @@ export async function touchDeviceLastSeen(
 }
 
 export async function rotateDeviceSessionStamp(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string,
   sessionStamp: string
@@ -114,7 +115,7 @@ export async function rotateDeviceSessionStamp(
 }
 
 export async function updateDeviceKeys(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string,
   keys: {
@@ -142,7 +143,7 @@ export async function updateDeviceKeys(
 }
 
 export async function clearDeviceKeys(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifiers: string[]
 ): Promise<number> {
@@ -166,7 +167,7 @@ export async function clearDeviceKeys(
   return Number(result.meta.changes ?? 0);
 }
 
-export async function isKnownDevice(db: D1Database, userId: string, deviceIdentifier: string): Promise<boolean> {
+export async function isKnownDevice(db: SqlDatabase, userId: string, deviceIdentifier: string): Promise<boolean> {
   const row = await db
     .prepare('SELECT 1 FROM devices WHERE user_id = ? AND device_identifier = ? LIMIT 1')
     .bind(userId, deviceIdentifier)
@@ -185,7 +186,7 @@ export async function isKnownDeviceByEmail(
   return isKnownDeviceForUser(user.id, deviceIdentifier);
 }
 
-export async function getDevicesByUserId(db: D1Database, userId: string): Promise<Device[]> {
+export async function getDevicesByUserId(db: SqlDatabase, userId: string): Promise<Device[]> {
   const res = await db
     .prepare(
       'SELECT user_id, device_identifier, name, type, session_stamp, encrypted_user_key, encrypted_public_key, encrypted_private_key, push_uuid, push_token, banned, banned_at, device_note, last_seen_at, created_at, updated_at ' +
@@ -196,7 +197,7 @@ export async function getDevicesByUserId(db: D1Database, userId: string): Promis
   return (res.results || []).map(mapDeviceRow);
 }
 
-export async function getDevice(db: D1Database, userId: string, deviceIdentifier: string): Promise<Device | null> {
+export async function getDevice(db: SqlDatabase, userId: string, deviceIdentifier: string): Promise<Device | null> {
   const row = await db
     .prepare(
       'SELECT user_id, device_identifier, name, type, session_stamp, encrypted_user_key, encrypted_public_key, encrypted_private_key, push_uuid, push_token, banned, banned_at, device_note, last_seen_at, created_at, updated_at ' +
@@ -208,7 +209,7 @@ export async function getDevice(db: D1Database, userId: string, deviceIdentifier
 }
 
 export async function updateDevicePushToken(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string,
   pushUuid: string,
@@ -226,7 +227,7 @@ export async function updateDevicePushToken(
 }
 
 export async function clearDevicePushToken(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string
 ): Promise<{ pushUuid: string | null } | null> {
@@ -245,7 +246,7 @@ export async function clearDevicePushToken(
 }
 
 export async function getDevicePushUuid(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string
 ): Promise<string | null> {
@@ -256,7 +257,7 @@ export async function getDevicePushUuid(
   return row?.push_uuid ?? null;
 }
 
-export async function userHasPushDevice(db: D1Database, userId: string): Promise<boolean> {
+export async function userHasPushDevice(db: SqlDatabase, userId: string): Promise<boolean> {
   const row = await db
     .prepare('SELECT 1 FROM devices WHERE user_id = ? AND push_token IS NOT NULL AND push_token <> ? LIMIT 1')
     .bind(userId, '')
@@ -264,7 +265,7 @@ export async function userHasPushDevice(db: D1Database, userId: string): Promise
   return !!row;
 }
 
-export async function deleteDevice(db: D1Database, userId: string, deviceIdentifier: string): Promise<boolean> {
+export async function deleteDevice(db: SqlDatabase, userId: string, deviceIdentifier: string): Promise<boolean> {
   const result = await db
     .prepare('DELETE FROM devices WHERE user_id = ? AND device_identifier = ?')
     .bind(userId, deviceIdentifier)
@@ -272,12 +273,12 @@ export async function deleteDevice(db: D1Database, userId: string, deviceIdentif
   return Number(result.meta.changes ?? 0) > 0;
 }
 
-export async function deleteDevicesByUserId(db: D1Database, userId: string): Promise<number> {
+export async function deleteDevicesByUserId(db: SqlDatabase, userId: string): Promise<number> {
   const result = await db.prepare('DELETE FROM devices WHERE user_id = ?').bind(userId).run();
   return Number(result.meta.changes ?? 0);
 }
 
-export async function getTrustedDeviceTokenSummariesByUserId(db: D1Database, userId: string): Promise<TrustedDeviceTokenSummary[]> {
+export async function getTrustedDeviceTokenSummariesByUserId(db: SqlDatabase, userId: string): Promise<TrustedDeviceTokenSummary[]> {
   const now = Date.now();
   await db.prepare('DELETE FROM trusted_two_factor_device_tokens WHERE expires_at < ?').bind(now).run();
 
@@ -296,7 +297,7 @@ export async function getTrustedDeviceTokenSummariesByUserId(db: D1Database, use
   }));
 }
 
-export async function deleteTrustedTwoFactorTokensByDevice(db: D1Database, userId: string, deviceIdentifier: string): Promise<number> {
+export async function deleteTrustedTwoFactorTokensByDevice(db: SqlDatabase, userId: string, deviceIdentifier: string): Promise<number> {
   const result = await db
     .prepare('DELETE FROM trusted_two_factor_device_tokens WHERE user_id = ? AND device_identifier = ?')
     .bind(userId, deviceIdentifier)
@@ -304,7 +305,7 @@ export async function deleteTrustedTwoFactorTokensByDevice(db: D1Database, userI
   return Number(result.meta.changes ?? 0);
 }
 
-export async function deleteTrustedTwoFactorTokensByUserId(db: D1Database, userId: string): Promise<number> {
+export async function deleteTrustedTwoFactorTokensByUserId(db: SqlDatabase, userId: string): Promise<number> {
   const result = await db
     .prepare('DELETE FROM trusted_two_factor_device_tokens WHERE user_id = ?')
     .bind(userId)
@@ -313,7 +314,7 @@ export async function deleteTrustedTwoFactorTokensByUserId(db: D1Database, userI
 }
 
 export async function updateTrustedTwoFactorTokensExpiryByDevice(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   deviceIdentifier: string,
   expiresAtMs: number
@@ -328,7 +329,7 @@ export async function updateTrustedTwoFactorTokensExpiryByDevice(
 }
 
 export async function saveTrustedTwoFactorDeviceToken(
-  db: D1Database,
+  db: SqlDatabase,
   trustedTokenKey: TrustedTokenKeyFn,
   token: string,
   userId: string,
@@ -347,7 +348,7 @@ export async function saveTrustedTwoFactorDeviceToken(
 }
 
 export async function getTrustedTwoFactorDeviceTokenUserId(
-  db: D1Database,
+  db: SqlDatabase,
   trustedTokenKey: TrustedTokenKeyFn,
   token: string,
   deviceIdentifier: string

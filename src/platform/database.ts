@@ -1,17 +1,35 @@
-import { Env } from '../types';
-import { SqlDatabase, SqlStatement } from './types';
+import { SqlDatabase, SqlQueryMeta, SqlQueryResult, SqlStatement } from './types';
 
 /**
- * Cloudflare D1 already implements exactly the `SqlDatabase` subset used by
- * the data layer, so on Cloudflare the binding is used directly (after a
- * structural cast). When an alternative backend lands (MySQL / PostgreSQL /
- * EdgeOne), implement `SqlDatabase` next to it and insert it here — the
- * repositories stay unchanged because they only call the subset.
+ * D1 already implements exactly the `SqlDatabase` subset used by the data
+ * layer, so the binding methods are surfaced one-to-one (after a structural
+ * cast). Statements returned to repositories are the original D1 instruction
+ * objects — batch() needs them pre-bound, and workerd rejects anything else.
  */
-export function getSqlDatabase(env: Env): SqlDatabase | null {
-  const db = (env as { DB?: unknown }).DB;
+export function getSqlDatabase(env: { DB?: unknown }): SqlDatabase | null {
+  const db = env.DB as {
+    prepare(sql: string): unknown;
+    batch(statements: unknown[]): Promise<Array<{ results?: unknown[]; meta?: SqlQueryMeta }>>;
+  } | null | undefined;
   if (!db) return null;
-  return db as unknown as SqlDatabase;
+
+  const database: SqlDatabase = {
+    engine: 'd1',
+    prepare(sql: string): SqlStatement {
+      // The D1 instruction object satisfies the SqlStatement shape by design
+      // (bind/first/all/run); repositories may only use that subset.
+      return db.prepare(sql) as unknown as SqlStatement;
+    },
+    async batch(statements) {
+      const results = await db.batch(statements);
+      return results.map((result) => ({
+        results: (result.results as Record<string, any>[] | undefined) || [],
+        success: true,
+        meta: (result.meta as SqlQueryMeta) || {},
+      }));
+    },
+  };
+  return database;
 }
 
 /**
@@ -25,3 +43,5 @@ export function asSqlStatement(value: unknown): SqlStatement {
   }
   return statement;
 }
+
+export type { SqlQueryResult, SqlStatement };

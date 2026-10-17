@@ -1,4 +1,6 @@
-export async function getRevisionDate(db: D1Database, userId: string): Promise<string> {
+import { type SqlDatabase, type SqlStatement } from '../platform';
+
+export async function getRevisionDate(db: SqlDatabase, userId: string): Promise<string> {
   const row = await db
     .prepare('SELECT revision_date FROM user_revisions WHERE user_id = ?')
     .bind(userId)
@@ -18,7 +20,7 @@ export async function getRevisionDate(db: D1Database, userId: string): Promise<s
   return date;
 }
 
-export async function updateRevisionDate(db: D1Database, userId: string): Promise<string> {
+export async function updateRevisionDate(db: SqlDatabase, userId: string): Promise<string> {
   const date = new Date().toISOString();
   await db
     .prepare(

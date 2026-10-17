@@ -1,4 +1,5 @@
 import type { Env, User } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 import { KV_MAX_OBJECT_BYTES, deleteBlobObject, getAttachmentObjectKey, getBlobStorageKind, putBlobObject } from './blob-store';
 import { BACKUP_SETTINGS_CONFIG_KEY, normalizeImportedBackupSettingsValue } from './backup-config';
 import { YUBICO_BOOTSTRAP_CLAIM_CONFIG_KEY } from './yubico-config';
@@ -77,12 +78,12 @@ export interface BackupImportExecutionResult {
   auditActorUserId: string | null;
 }
 
-async function queryRows(db: D1Database, sql: string, ...values: unknown[]): Promise<SqlRow[]> {
+async function queryRows(db: SqlDatabase, sql: string, ...values: unknown[]): Promise<SqlRow[]> {
   const response = await db.prepare(sql).bind(...values).all<SqlRow>();
   return (response.results || []).map((row) => ({ ...row }));
 }
 
-async function getTableCreateSql(db: D1Database, table: BackupTableName): Promise<string> {
+async function getTableCreateSql(db: SqlDatabase, table: BackupTableName): Promise<string> {
   const row = await db
     .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
     .bind(table)
@@ -110,7 +111,7 @@ function buildShadowTableCreateSql(createSql: string, table: BackupTableName): s
   return next;
 }
 
-async function resetRestoreArtifacts(db: D1Database): Promise<void> {
+async function resetRestoreArtifacts(db: SqlDatabase): Promise<void> {
   const dropStatements = BACKUP_TABLES
     .slice()
     .reverse()
@@ -120,8 +121,8 @@ async function resetRestoreArtifacts(db: D1Database): Promise<void> {
   }
 }
 
-async function createShadowTables(db: D1Database): Promise<void> {
-  const createStatements: D1PreparedStatement[] = [];
+async function createShadowTables(db: SqlDatabase): Promise<void> {
+  const createStatements: SqlStatement[] = [];
   for (const table of BACKUP_TABLES) {
     const createSql = await getTableCreateSql(db, table);
     createStatements.push(db.prepare(buildShadowTableCreateSql(createSql, table)));
@@ -130,7 +131,7 @@ async function createShadowTables(db: D1Database): Promise<void> {
 }
 
 async function validateShadowTableCounts(
-  db: D1Database,
+  db: SqlDatabase,
   expectedCounts: Partial<Record<BackupTableName, number>>
 ): Promise<void> {
   await Promise.all(BACKUP_TABLES.map(async (table) => {
@@ -143,8 +144,8 @@ async function validateShadowTableCounts(
   }));
 }
 
-async function swapShadowTablesIntoPlace(db: D1Database): Promise<void> {
-  const statements: D1PreparedStatement[] = [];
+async function swapShadowTablesIntoPlace(db: SqlDatabase): Promise<void> {
+  const statements: SqlStatement[] = [];
   // Commit by replacing live table contents from validated shadow tables.
   // This avoids D1 schema-rename edge cases while keeping current data intact
   // until the final batch succeeds.
@@ -157,7 +158,7 @@ async function swapShadowTablesIntoPlace(db: D1Database): Promise<void> {
   await db.batch(statements);
 }
 
-async function ensureImportTargetIsFresh(db: D1Database): Promise<void> {
+async function ensureImportTargetIsFresh(db: SqlDatabase): Promise<void> {
   const counts = await Promise.all([
     db.prepare('SELECT COUNT(*) AS count FROM ciphers').first<{ count: number }>(),
     db.prepare('SELECT COUNT(*) AS count FROM folders').first<{ count: number }>(),
@@ -170,7 +171,7 @@ async function ensureImportTargetIsFresh(db: D1Database): Promise<void> {
   }
 }
 
-function buildResetImportTargetStatements(db: D1Database): D1PreparedStatement[] {
+function buildResetImportTargetStatements(db: SqlDatabase): SqlStatement[] {
   return [
     'DELETE FROM attachments',
     'DELETE FROM ciphers',
@@ -183,7 +184,7 @@ function buildResetImportTargetStatements(db: D1Database): D1PreparedStatement[]
   ].map((sql) => db.prepare(sql));
 }
 
-async function collectCurrentBlobKeys(db: D1Database): Promise<Set<string>> {
+async function collectCurrentBlobKeys(db: SqlDatabase): Promise<Set<string>> {
   const keys = new Set<string>();
   const attachmentRows = await queryRows(
     db,
@@ -297,7 +298,7 @@ async function prepareImportedConfigRows(
   return nextConfigRows;
 }
 
-async function importPreparedBackupRows(db: D1Database, payload: BackupPayload['db'], env: Env): Promise<BackupPayload['db']> {
+async function importPreparedBackupRows(db: SqlDatabase, payload: BackupPayload['db'], env: Env): Promise<BackupPayload['db']> {
   const preparedDb: BackupPayload['db'] = {
     config: await prepareImportedConfigRows(env, payload.config || [], payload.users || []),
     users: cloneRows(payload.users || []).map((row) => ({
@@ -408,14 +409,14 @@ function prepareImportPayloadForTarget(env: Env, payload: BackupPayload, files: 
   return result;
 }
 
-function buildInsertStatements(db: D1Database, table: string, columns: string[], rows: SqlRow[], upsert = false): D1PreparedStatement[] {
+function buildInsertStatements(db: SqlDatabase, table: string, columns: string[], rows: SqlRow[], upsert = false): SqlStatement[] {
   if (!rows.length) return [];
   const placeholders = `(${columns.map(() => '?').join(', ')})`;
   const sql = `INSERT ${upsert ? 'OR REPLACE ' : ''}INTO ${table} (${columns.join(', ')}) VALUES ${placeholders}`;
   return rows.map((row) => db.prepare(sql).bind(...columns.map((column) => row[column] ?? null)));
 }
 
-async function runInsertBatch(db: D1Database, table: string, statements: D1PreparedStatement[]): Promise<void> {
+async function runInsertBatch(db: SqlDatabase, table: string, statements: SqlStatement[]): Promise<void> {
   if (!statements.length) return;
   try {
     await db.batch(statements);
@@ -542,7 +543,7 @@ async function prepareRemoteAttachmentPayload(
   return result;
 }
 
-async function removeAttachmentRows(db: D1Database, attachmentRows: SqlRow[], useShadowTable: boolean = false): Promise<void> {
+async function removeAttachmentRows(db: SqlDatabase, attachmentRows: SqlRow[], useShadowTable: boolean = false): Promise<void> {
   if (!attachmentRows.length) return;
   const tableName = useShadowTable ? shadowTableName('attachments') : 'attachments';
   const statements = attachmentRows
@@ -552,7 +553,7 @@ async function removeAttachmentRows(db: D1Database, attachmentRows: SqlRow[], us
       if (!attachmentId || !cipherId) return null;
       return db.prepare(`DELETE FROM ${tableName} WHERE id = ? AND cipher_id = ?`).bind(attachmentId, cipherId);
     })
-    .filter((statement): statement is D1PreparedStatement => !!statement);
+    .filter((statement): statement is SqlStatement => !!statement);
   if (!statements.length) return;
   await db.batch(statements);
 }
@@ -626,7 +627,7 @@ async function cleanupOrphanedBlobFiles(env: Env, beforeKeys: Set<string>, after
   }
 }
 
-async function importBackupRows(db: D1Database, payload: BackupPayload['db'], useShadowTables: boolean = false): Promise<void> {
+async function importBackupRows(db: SqlDatabase, payload: BackupPayload['db'], useShadowTables: boolean = false): Promise<void> {
   const tableName = (table: BackupTableName): string => (useShadowTables ? shadowTableName(table) : table);
   await runInsertBatch(
     db,

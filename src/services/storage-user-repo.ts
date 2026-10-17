@@ -1,6 +1,7 @@
 import type { User } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
-type SafeBind = (stmt: D1PreparedStatement, ...values: any[]) => D1PreparedStatement;
+type SafeBind = (stmt: SqlStatement, ...values: any[]) => SqlStatement;
 const USER_SELECT_COLUMNS =
   'id, email, name, master_password_hint, master_password_hash, key, private_key, public_key, ' +
   'kdf_type, kdf_iterations, kdf_memory, kdf_parallelism, security_stamp, role, status, verify_devices, ' +
@@ -38,7 +39,7 @@ function mapUserRow(row: any): User {
   };
 }
 
-export async function getUser(db: D1Database, email: string): Promise<User | null> {
+export async function getUser(db: SqlDatabase, email: string): Promise<User | null> {
   const row = await db
     .prepare(`SELECT ${USER_SELECT_COLUMNS} FROM users WHERE email = ?`)
     .bind(email.toLowerCase())
@@ -47,7 +48,7 @@ export async function getUser(db: D1Database, email: string): Promise<User | nul
   return mapUserRow(row);
 }
 
-export async function getUserById(db: D1Database, id: string): Promise<User | null> {
+export async function getUserById(db: SqlDatabase, id: string): Promise<User | null> {
   const row = await db
     .prepare(`SELECT ${USER_SELECT_COLUMNS} FROM users WHERE id = ?`)
     .bind(id)
@@ -56,19 +57,19 @@ export async function getUserById(db: D1Database, id: string): Promise<User | nu
   return mapUserRow(row);
 }
 
-export async function getUserCount(db: D1Database): Promise<number> {
+export async function getUserCount(db: SqlDatabase): Promise<number> {
   const row = await db.prepare('SELECT COUNT(*) AS count FROM users').first<{ count: number }>();
   return Number(row?.count || 0);
 }
 
-export async function getAllUsers(db: D1Database): Promise<User[]> {
+export async function getAllUsers(db: SqlDatabase): Promise<User[]> {
   const res = await db
     .prepare(`SELECT ${USER_SELECT_COLUMNS} FROM users ORDER BY created_at ASC`)
     .all<any>();
   return (res.results || []).map((row) => mapUserRow(row));
 }
 
-export async function saveUser(db: D1Database, safeBind: SafeBind, user: User): Promise<void> {
+export async function saveUser(db: SqlDatabase, safeBind: SafeBind, user: User): Promise<void> {
   const email = user.email.toLowerCase();
   const stmt = db.prepare(
     'INSERT INTO users(id, email, name, master_password_hint, master_password_hash, key, private_key, public_key, kdf_type, kdf_iterations, kdf_memory, kdf_parallelism, security_stamp, role, status, verify_devices, totp_secret, totp_recovery_code, yubikey_key1, yubikey_key2, yubikey_key3, yubikey_key4, yubikey_key5, yubikey_nfc, api_key, created_at, updated_at) ' +
@@ -109,12 +110,12 @@ export async function saveUser(db: D1Database, safeBind: SafeBind, user: User): 
   ).run();
 }
 
-export async function createUser(db: D1Database, safeBind: SafeBind, user: User): Promise<void> {
+export async function createUser(db: SqlDatabase, safeBind: SafeBind, user: User): Promise<void> {
   await saveUser(db, safeBind, user);
 }
 
 export async function upgradePasswordVerifier(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   expectedVerifier: string,
   securityStamp: string,
@@ -128,7 +129,7 @@ export async function upgradePasswordVerifier(
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function createFirstUser(db: D1Database, safeBind: SafeBind, user: User): Promise<boolean> {
+export async function createFirstUser(db: SqlDatabase, safeBind: SafeBind, user: User): Promise<boolean> {
   const email = user.email.toLowerCase();
   const stmt = db.prepare(
     'INSERT INTO users(id, email, name, master_password_hint, master_password_hash, key, private_key, public_key, kdf_type, kdf_iterations, kdf_memory, kdf_parallelism, security_stamp, role, status, verify_devices, totp_secret, totp_recovery_code, yubikey_key1, yubikey_key2, yubikey_key3, yubikey_key4, yubikey_key5, yubikey_nfc, api_key, created_at, updated_at) ' +
@@ -169,7 +170,7 @@ export async function createFirstUser(db: D1Database, safeBind: SafeBind, user: 
   return (result.meta.changes ?? 0) > 0;
 }
 
-export async function deleteUserById(db: D1Database, id: string): Promise<boolean> {
+export async function deleteUserById(db: SqlDatabase, id: string): Promise<boolean> {
   const result = await db.prepare('DELETE FROM users WHERE id = ?').bind(id).run();
   return (result.meta.changes ?? 0) > 0;
 }

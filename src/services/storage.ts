@@ -1,4 +1,5 @@
 import { User, Cipher, Folder, Attachment, Device, Invite, AuditLog, Send, TrustedDeviceTokenSummary, RefreshTokenRecord, CustomEquivalentDomain, AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential, AuthRequestRecord } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 import { LIMITS } from '../config/limits';
 import { ensurePushInstallationCredentials } from './push-relay';
 import { ensureStorageSchema } from './storage-schema';
@@ -189,7 +190,7 @@ export class StorageService {
   private static readonly TOTP_REPLAY_MARKER_TTL_MS = 5 * 60 * 1000;
   private static readonly PERIODIC_CLEANUP_PROBABILITY = LIMITS.cleanup.cleanupProbability;
 
-  constructor(private db: D1Database) {}
+  constructor(private db: SqlDatabase) {}
 
   /**
    * D1 .bind() throws on `undefined` values. This helper converts every
@@ -197,7 +198,7 @@ export class StorageService {
    * error - especially important after the opaque-passthrough change where
    * client-supplied JSON may omit fields we later reference as columns.
    */
-  private safeBind(stmt: D1PreparedStatement, ...values: any[]): D1PreparedStatement {
+  private safeBind(stmt: SqlStatement, ...values: any[]): SqlStatement {
     return stmt.bind(...values.map(v => v === undefined ? null : v));
   }
 

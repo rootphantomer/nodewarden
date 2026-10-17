@@ -1,4 +1,5 @@
 import type { UserDomainSettings } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 import { normalizeCustomEquivalentDomains, normalizeEquivalentDomains } from './domain-rules';
 
 // Storage adapter for the domain_settings table.
@@ -17,7 +18,7 @@ function parseJsonArray<T>(raw: string | null | undefined, fallback: T[]): T[] {
   }
 }
 
-export async function getUserDomainSettings(db: D1Database, userId: string): Promise<UserDomainSettings> {
+export async function getUserDomainSettings(db: SqlDatabase, userId: string): Promise<UserDomainSettings> {
   const row = await db
     .prepare('SELECT equivalent_domains, custom_equivalent_domains, excluded_global_equivalent_domains, updated_at FROM domain_settings WHERE user_id = ?')
     .bind(userId)
@@ -45,7 +46,7 @@ export async function getUserDomainSettings(db: D1Database, userId: string): Pro
 }
 
 export async function saveUserDomainSettings(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   equivalentDomains: string[][],
   customEquivalentDomains: UserDomainSettings['customEquivalentDomains'],

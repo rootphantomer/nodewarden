@@ -2,6 +2,7 @@ import {
   requestYubicoApiCredentials,
   type YubicoApiCredentials,
 } from '../utils/yubico-otp';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
 export const YUBICO_CLIENT_ID_CONFIG_KEY = 'globalSettings__yubico__clientId';
 export const YUBICO_SECRET_KEY_CONFIG_KEY = 'globalSettings__yubico__key';
@@ -14,7 +15,7 @@ export interface YubicoCredentialInitializationResult {
   created: boolean;
 }
 
-export async function getYubicoCredentials(db: D1Database): Promise<YubicoApiCredentials | null> {
+export async function getYubicoCredentials(db: SqlDatabase): Promise<YubicoApiCredentials | null> {
   const result = await db
     .prepare('SELECT key, value FROM config WHERE key IN (?, ?)')
     .bind(YUBICO_CLIENT_ID_CONFIG_KEY, YUBICO_SECRET_KEY_CONFIG_KEY)
@@ -26,7 +27,7 @@ export async function getYubicoCredentials(db: D1Database): Promise<YubicoApiCre
 }
 
 export async function replaceYubicoCredentials(
-  db: D1Database,
+  db: SqlDatabase,
   credentials: YubicoApiCredentials
 ): Promise<void> {
   const clientId = String(credentials.clientId || '').trim();
@@ -42,7 +43,7 @@ export async function replaceYubicoCredentials(
   ]);
 }
 
-async function acquireBootstrapClaim(db: D1Database): Promise<string | null> {
+async function acquireBootstrapClaim(db: SqlDatabase): Promise<string | null> {
   const now = Date.now();
   await db
     .prepare('DELETE FROM config WHERE key = ? AND CAST(value AS INTEGER) < ?')
@@ -56,7 +57,7 @@ async function acquireBootstrapClaim(db: D1Database): Promise<string | null> {
   return (result.meta.changes ?? 0) > 0 ? claim : null;
 }
 
-async function releaseBootstrapClaim(db: D1Database, claim: string): Promise<void> {
+async function releaseBootstrapClaim(db: SqlDatabase, claim: string): Promise<void> {
   await db
     .prepare('DELETE FROM config WHERE key = ? AND value = ?')
     .bind(YUBICO_BOOTSTRAP_CLAIM_CONFIG_KEY, claim)
@@ -64,7 +65,7 @@ async function releaseBootstrapClaim(db: D1Database, claim: string): Promise<voi
 }
 
 export async function initializeYubicoCredentialsOnce(
-  db: D1Database,
+  db: SqlDatabase,
   email: string,
   otp: string
 ): Promise<YubicoCredentialInitializationResult | null> {

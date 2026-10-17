@@ -1,4 +1,5 @@
 import { Env, Cipher, Folder, CipherType } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 import { notifyUserVaultSync } from '../durable/notifications-hub';
 import { StorageService } from '../services/storage';
 import { errorResponse, jsonResponse } from '../utils/response';
@@ -101,7 +102,7 @@ function normalizeOptionalId(value: unknown): string | null {
   return normalized ? normalized : null;
 }
 
-async function runBatchInChunks(db: D1Database, statements: D1PreparedStatement[], chunkSize: number): Promise<void> {
+async function runBatchInChunks(db: SqlDatabase, statements: SqlStatement[], chunkSize: number): Promise<void> {
   for (let i = 0; i < statements.length; i += chunkSize) {
     const chunk = statements.slice(i, i + chunkSize);
     await db.batch(chunk);

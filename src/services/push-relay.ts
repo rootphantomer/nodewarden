@@ -1,4 +1,5 @@
 import type { Env } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 import {
   setConfigValue as saveConfigValue,
 } from './storage-config-repo';
@@ -37,12 +38,12 @@ function randomInstallationEmail(): string {
   return `${localPart}@nodewarden.app`;
 }
 
-async function getConfigKeyPresence(db: D1Database, key: string): Promise<string | null> {
+async function getConfigKeyPresence(db: SqlDatabase, key: string): Promise<string | null> {
   const row = await db.prepare('SELECT value FROM config WHERE key = ? LIMIT 1').bind(key).first<{ value: string }>();
   return typeof row?.value === 'string' ? row.value : null;
 }
 
-async function getPushInstallationCredentials(db: D1Database): Promise<{ id: string; key: string } | null> {
+async function getPushInstallationCredentials(db: SqlDatabase): Promise<{ id: string; key: string } | null> {
   const [id, key] = await Promise.all([
     getConfigKeyPresence(db, PUSH_INSTALLATION_ID_KEY),
     getConfigKeyPresence(db, PUSH_INSTALLATION_KEY_KEY),
@@ -52,7 +53,7 @@ async function getPushInstallationCredentials(db: D1Database): Promise<{ id: str
   return normalizedId && normalizedKey ? { id: normalizedId, key: normalizedKey } : null;
 }
 
-export async function ensurePushInstallationCredentials(db: D1Database): Promise<{ id: string; key: string } | null> {
+export async function ensurePushInstallationCredentials(db: SqlDatabase): Promise<{ id: string; key: string } | null> {
   const existing = await getPushInstallationCredentials(db);
   if (existing) return existing;
 

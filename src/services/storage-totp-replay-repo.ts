@@ -1,7 +1,8 @@
 type ShouldRunPeriodicCleanup = (lastRunAt: number, intervalMs: number) => boolean;
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
 export async function consumeTotpLoginCounter(
-  db: D1Database,
+  db: SqlDatabase,
   shouldRunPeriodicCleanup: ShouldRunPeriodicCleanup,
   lastCleanupAt: number,
   cleanupIntervalMs: number,

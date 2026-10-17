@@ -11,8 +11,10 @@
 
 export type SqlValue = null | string | number | boolean | ArrayBuffer | ArrayBufferView;
 
+export type SqlEngine = 'd1' | 'mysql';
+
 export interface SqlQueryMeta {
-  [key: string]: unknown;
+  [key: string]: any;
 }
 
 /** Result shape mirroring `D1Result`: `results` plus execution metadata. */
@@ -28,16 +30,18 @@ export interface SqlQueryResult<Results> {
  * subset is intentionally unsupported so alternative SQL backends can
  * implement the same surface.
  */
-export interface SqlStatement<Values extends readonly SqlValue[] = readonly SqlValue[]> {
+export interface SqlStatement<Values extends readonly unknown[] = readonly unknown[]> {
   bind(...values: Values): SqlStatement;
-  first<T = Record<string, unknown>>(colName?: string): Promise<T | null>;
-  all<T = Record<string, unknown>>(): Promise<SqlQueryResult<T[]>>;
-  run(): Promise<SqlQueryResult<Record<string, unknown>[]>>;
+  first<T = Record<string, any>>(colName?: string): Promise<T | null>;
+  all<T = Record<string, any>>(): Promise<SqlQueryResult<T[]>>;
+  run(): Promise<SqlQueryResult<Record<string, any>[]>>;
 }
 
 export interface SqlDatabase {
+  /** Backend engine tag; schema bootstrap branches on it. D1 bindings omit it and default to 'd1'. */
+  readonly engine?: 'd1' | 'mysql';
   prepare(sql: string): SqlStatement;
-  batch(statements: SqlStatement[]): Promise<SqlQueryResult<Record<string, unknown>[]>[]>;
+  batch(statements: SqlStatement[]): Promise<SqlQueryResult<Record<string, any>[]>[]>;
 }
 
 /** Identity a persisted websocket connection ticket resolves to. */

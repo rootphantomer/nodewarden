@@ -9,6 +9,7 @@
 // - If the new table stores persistent data, update the backup export/import
 //   contract in src/services/backup-archive.ts and backup-import.ts.
 // - Keep statements idempotent; D1 may execute them again on later requests.
+import { type SqlDatabase, type SqlStatement } from '../platform';
 const SCHEMA_STATEMENTS: readonly string[] = [
   'CREATE TABLE IF NOT EXISTS users (' +
   'id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT, master_password_hint TEXT, master_password_hash TEXT NOT NULL, ' +
@@ -172,7 +173,10 @@ const SCHEMA_STATEMENTS: readonly string[] = [
   'jti TEXT PRIMARY KEY, expires_at INTEGER NOT NULL)',
 ];
 
-async function executeSchemaStatement(db: D1Database, statement: string): Promise<void> {
+import { getSqlEngine } from '../platform/engine';
+import { ensureMysqlStorageSchema } from '../platform/mysql/schema';
+
+async function executeSchemaStatement(db: SqlDatabase, statement: string): Promise<void> {
   try {
     await db.prepare(statement).run();
   } catch (error) {
@@ -184,7 +188,7 @@ async function executeSchemaStatement(db: D1Database, statement: string): Promis
   }
 }
 
-async function ensureAdminUserExists(db: D1Database): Promise<void> {
+async function ensureAdminUserExists(db: SqlDatabase): Promise<void> {
   const admin = await db.prepare("SELECT id FROM users WHERE role = 'admin' LIMIT 1").first<{ id: string }>();
   if (admin?.id) return;
 
@@ -199,7 +203,13 @@ async function ensureAdminUserExists(db: D1Database): Promise<void> {
     .run();
 }
 
-export async function ensureStorageSchema(db: D1Database): Promise<void> {
+export async function ensureStorageSchema(db: SqlDatabase): Promise<void> {
+  if (getSqlEngine(db) === 'mysql') {
+    // MySQL schema is maintained in src/platform/mysql/schema.ts (hand
+    // translated; TEXT PK / strftime / EXCLUDED nuances cannot be regexed).
+    await ensureMysqlStorageSchema(db);
+    return;
+  }
   await db.prepare('PRAGMA foreign_keys = ON').run();
   await db.prepare('CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT NOT NULL)').run();
   for (const stmt of SCHEMA_STATEMENTS) {

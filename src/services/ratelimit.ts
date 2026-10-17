@@ -1,4 +1,5 @@
 import { LIMITS } from '../config/limits';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
 // Rate limiting service.
 // - Login attempts: D1-backed (low volume, security-critical, needs cross-colo persistence).
@@ -22,7 +23,7 @@ export class RateLimitService {
   private static readonly LOGIN_IP_RETENTION_MS = LIMITS.rateLimit.loginIpRetentionMs;
   private static readonly STRICT_BUDGET_CLEANUP_INTERVAL_MS = LIMITS.rateLimit.loginIpCleanupIntervalMs;
 
-  constructor(private db: D1Database) {}
+  constructor(private db: SqlDatabase) {}
 
   private shouldRunCleanup(lastRunAt: number, intervalMs: number): boolean {
     const now = Date.now();

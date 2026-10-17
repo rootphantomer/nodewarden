@@ -1,6 +1,7 @@
 import type { AccountPasskeyChallenge, AccountPasskeyChallengeScope, AccountPasskeyCredential } from '../types';
+import { type SqlDatabase, type SqlStatement } from '../platform';
 
-type SafeBindFn = (stmt: D1PreparedStatement, ...values: any[]) => D1PreparedStatement;
+type SafeBindFn = (stmt: SqlStatement, ...values: any[]) => SqlStatement;
 
 let accountPasskeySchemaReady = false;
 
@@ -32,12 +33,12 @@ const ACCOUNT_PASSKEY_CHALLENGE_COLUMNS = [
   'created_at',
 ] as const;
 
-async function tableColumns(db: D1Database, tableName: 'webauthn_credentials' | 'webauthn_challenges'): Promise<Set<string>> {
+async function tableColumns(db: SqlDatabase, tableName: 'webauthn_credentials' | 'webauthn_challenges'): Promise<Set<string>> {
   const result = await db.prepare(`PRAGMA table_info(${tableName})`).all<{ name: string }>();
   return new Set((result.results || []).map((row) => String(row.name || '').trim()).filter(Boolean));
 }
 
-async function ensureAccountPasskeySchema(db: D1Database): Promise<void> {
+async function ensureAccountPasskeySchema(db: SqlDatabase): Promise<void> {
   if (accountPasskeySchemaReady) return;
 
   await db
@@ -155,7 +156,7 @@ function mapChallengeRow(row: {
 }
 
 export async function saveAccountPasskeyCredential(
-  db: D1Database,
+  db: SqlDatabase,
   safeBind: SafeBindFn,
   credential: AccountPasskeyCredential
 ): Promise<void> {
@@ -191,7 +192,7 @@ export async function saveAccountPasskeyCredential(
 }
 
 export async function listAccountPasskeyCredentialsByUserId(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   purpose: AccountPasskeyCredential['purpose'] = 'login'
 ): Promise<AccountPasskeyCredential[]> {
@@ -204,7 +205,7 @@ export async function listAccountPasskeyCredentialsByUserId(
 }
 
 export async function getAccountPasskeyCredentialById(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   id: string
 ): Promise<AccountPasskeyCredential | null> {
@@ -217,7 +218,7 @@ export async function getAccountPasskeyCredentialById(
 }
 
 export async function getAccountPasskeyCredentialByCredentialId(
-  db: D1Database,
+  db: SqlDatabase,
   credentialId: string
 ): Promise<AccountPasskeyCredential | null> {
   await ensureAccountPasskeySchema(db);
@@ -229,7 +230,7 @@ export async function getAccountPasskeyCredentialByCredentialId(
 }
 
 export async function countAccountPasskeyCredentialsByUserId(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   purpose: AccountPasskeyCredential['purpose'] = 'login'
 ): Promise<number> {
@@ -242,7 +243,7 @@ export async function countAccountPasskeyCredentialsByUserId(
 }
 
 export async function updateAccountPasskeyCounter(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   credentialId: string,
   counter: number,
@@ -256,7 +257,7 @@ export async function updateAccountPasskeyCounter(
 }
 
 export async function updateAccountPasskeyEncryption(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   credentialId: string,
   encryptedUserKey: string,
@@ -276,7 +277,7 @@ export async function updateAccountPasskeyEncryption(
 }
 
 export async function deleteAccountPasskeyCredential(
-  db: D1Database,
+  db: SqlDatabase,
   userId: string,
   id: string,
   purpose: AccountPasskeyCredential['purpose'] = 'login'
@@ -290,7 +291,7 @@ export async function deleteAccountPasskeyCredential(
 }
 
 export async function saveAccountPasskeyChallenge(
-  db: D1Database,
+  db: SqlDatabase,
   challenge: AccountPasskeyChallenge
 ): Promise<void> {
   await ensureAccountPasskeySchema(db);
@@ -312,7 +313,7 @@ export async function saveAccountPasskeyChallenge(
 }
 
 export async function consumeAccountPasskeyChallenge(
-  db: D1Database,
+  db: SqlDatabase,
   challengeHash: string,
   scope: AccountPasskeyChallengeScope,
   userId: string | null,
