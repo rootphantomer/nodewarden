@@ -11,6 +11,7 @@ problem.md
 
 # Build output
 dist/
+cloud-functions/
 build/
 
 # IDE
