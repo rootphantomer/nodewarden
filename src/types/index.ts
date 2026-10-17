@@ -1,8 +1,10 @@
 // Environment bindings
 export interface Env {
   DB: D1Database;
-  NOTIFICATIONS_HUB: DurableObjectNamespace;
-  BACKUP_TRANSFER_RUNNER: DurableObjectNamespace;
+  // Durable Object bindings: required on Cloudflare, optional for other
+  // platform targets — the platform layer degrades gracefully without them.
+  NOTIFICATIONS_HUB?: DurableObjectNamespace;
+  BACKUP_TRANSFER_RUNNER?: DurableObjectNamespace;
   ASSETS?: {
     fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
   };

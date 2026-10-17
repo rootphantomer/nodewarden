@@ -748,6 +748,15 @@ export function notifyUserSendDelete(
   ));
 }
 
+/**
+ * Namespace used by cross-user broadcast helpers. The binding is always
+ * present inside the Durable Object runtime on Cloudflare; a null fallback
+ * keeps these helpers silent no-ops on platforms without realtime push.
+ */
+function getHubBroadcastNamespace(env: Env): NonNullable<Env['NOTIFICATIONS_HUB']> | null {
+  return env.NOTIFICATIONS_HUB ?? null;
+}
+
 export function notifyUserLogout(
   env: Env,
   userId: string,
@@ -757,9 +766,11 @@ export function notifyUserLogout(
 }
 
 export async function getOnlineUserDevices(env: Env, userId: string): Promise<string[]> {
+  const hub = getHubBroadcastNamespace(env);
+  if (!hub) return [];
   try {
-    const id = env.NOTIFICATIONS_HUB.idFromName(userId);
-    const stub = env.NOTIFICATIONS_HUB.get(id);
+    const id = hub.idFromName(userId);
+    const stub = hub.get(id);
     const response = await stub.fetch('https://notifications/internal/online');
     if (!response.ok) return [];
     const body = (await response.json().catch(() => null)) as { deviceIdentifiers?: string[] } | null;
@@ -776,8 +787,10 @@ export async function notifyAuthRequestResponse(
   contextId?: string | null
 ): Promise<void> {
   try {
-    const id = env.NOTIFICATIONS_HUB.idFromName(authRequestId);
-    const stub = env.NOTIFICATIONS_HUB.get(id);
+    const hub = getHubBroadcastNamespace(env);
+    if (!hub) return;
+    const id = hub.idFromName(authRequestId);
+    const stub = hub.get(id);
     await stub.fetch('https://notifications/internal/auth-request-response', {
       method: 'POST',
       headers: {
@@ -824,8 +837,10 @@ async function notifyUserUpdate(
   payloadOverride?: Record<string, unknown> | null
 ): Promise<void> {
   try {
-    const id = env.NOTIFICATIONS_HUB.idFromName(userId);
-    const stub = env.NOTIFICATIONS_HUB.get(id);
+    const hub = getHubBroadcastNamespace(env);
+    if (!hub) return;
+    const id = hub.idFromName(userId);
+    const stub = hub.get(id);
     await stub.fetch('https://notifications/internal/notify', {
       method: 'POST',
       headers: {
@@ -878,8 +893,10 @@ export async function notifyUserBackupProgress(
 ): Promise<void> {
   const revisionDate = progress.timestamp || new Date().toISOString();
   try {
-    const id = env.NOTIFICATIONS_HUB.idFromName(userId);
-    const stub = env.NOTIFICATIONS_HUB.get(id);
+    const hub = getHubBroadcastNamespace(env);
+    if (!hub) return;
+    const id = hub.idFromName(userId);
+    const stub = hub.get(id);
     await stub.fetch('https://notifications/internal/notify', {
       method: 'POST',
       headers: {

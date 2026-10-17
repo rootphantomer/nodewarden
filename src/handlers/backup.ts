@@ -1,4 +1,5 @@
 import type { Env, User } from '../types';
+import { getBackupRunner } from '../platform';
 import { errorResponse, jsonResponse } from '../utils/response';
 import {
   type BackupArchiveBundle,
@@ -254,9 +255,8 @@ async function uploadRemoteAttachmentChunk(
   attachments: Array<{ blobName: string }>
 ): Promise<void> {
   if (!attachments.length) return;
-  const id = env.BACKUP_TRANSFER_RUNNER.idFromName('remote-attachment-sync');
-  const stub = env.BACKUP_TRANSFER_RUNNER.get(id);
-  const response = await stub.fetch('https://backup-transfer/internal/upload-attachment-chunk', {
+  const runner = getBackupRunner(env);
+  const response = await runner.dispatch('remote-attachment-sync', 'https://backup-transfer/internal/upload-attachment-chunk', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
@@ -539,9 +539,8 @@ async function runConfiguredBackupInDurableObject(
     trigger: 'manual' | 'scheduled';
   }
 ): Promise<DurableBackupRunResponse | null> {
-  const id = env.BACKUP_TRANSFER_RUNNER.idFromName('configured-backup-runner');
-  const stub = env.BACKUP_TRANSFER_RUNNER.get(id);
-  const response = await stub.fetch('https://backup-transfer/internal/run-configured-backup', {
+  const runner = getBackupRunner(env);
+  const response = await runner.dispatch('configured-backup-runner', 'https://backup-transfer/internal/run-configured-backup', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
@@ -569,9 +568,8 @@ async function runConfiguredBackupInDurableObject(
 }
 
 async function runScheduledBackupsInDurableObject(env: Env): Promise<void> {
-  const id = env.BACKUP_TRANSFER_RUNNER.idFromName('configured-backup-runner');
-  const stub = env.BACKUP_TRANSFER_RUNNER.get(id);
-  const response = await stub.fetch('https://backup-transfer/internal/run-scheduled-backups', {
+  const runner = getBackupRunner(env);
+  const response = await runner.dispatch('configured-backup-runner', 'https://backup-transfer/internal/run-scheduled-backups', {
     method: 'POST',
   });
   if (response.status === 409) {
@@ -594,9 +592,8 @@ async function downloadRemoteAttachmentViaDurableObject(
   destination: BackupDestinationRecord,
   blobName: string
 ): Promise<Uint8Array | null> {
-  const id = env.BACKUP_TRANSFER_RUNNER.idFromName('remote-attachment-restore');
-  const stub = env.BACKUP_TRANSFER_RUNNER.get(id);
-  const response = await stub.fetch('https://backup-transfer/internal/download-remote-attachment', {
+  const runner = getBackupRunner(env);
+  const response = await runner.dispatch('remote-attachment-restore', 'https://backup-transfer/internal/download-remote-attachment', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
@@ -624,9 +621,8 @@ async function downloadRemoteAttachmentBatchViaDurableObject(
   const result = new Map<string, Uint8Array>();
   if (!names.length) return result;
 
-  const id = env.BACKUP_TRANSFER_RUNNER.idFromName('remote-attachment-restore');
-  const stub = env.BACKUP_TRANSFER_RUNNER.get(id);
-  const response = await stub.fetch('https://backup-transfer/internal/download-remote-attachment-batch', {
+  const runner = getBackupRunner(env);
+  const response = await runner.dispatch('remote-attachment-restore', 'https://backup-transfer/internal/download-remote-attachment-batch', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
@@ -791,9 +787,8 @@ async function restoreRemoteBackupInDurableObject(
     targetDeviceIdentifier?: string | null;
   }
 ): Promise<BackupImportExecutionResult['result'] | null> {
-  const id = env.BACKUP_TRANSFER_RUNNER.idFromName('configured-backup-runner');
-  const stub = env.BACKUP_TRANSFER_RUNNER.get(id);
-  const response = await stub.fetch('https://backup-transfer/internal/restore-remote-backup', {
+  const runner = getBackupRunner(env);
+  const response = await runner.dispatch('configured-backup-runner', 'https://backup-transfer/internal/restore-remote-backup', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json; charset=utf-8',
