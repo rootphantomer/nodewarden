@@ -17,6 +17,25 @@ export interface SqlQueryMeta {
   [key: string]: any;
 }
 
+/**
+ * Platform-agnostic binary blob backend. Implemented on Cloudflare by R2/KV
+ * bindings (via src/services/blob-store.ts) and on other platforms (e.g.
+ * EdgeOne Makers Blob) by an adapter passed as `Env.ATTACHMENTS_BLOB`.
+ */
+export interface PlatformBlobBackend {
+  /** Store bytes; `value` may be an ArrayBuffer for binary content. */
+  set(
+    key: string,
+    value: ArrayBuffer | string,
+    meta: { contentType?: string; customMetadata?: Record<string, string> | null }
+  ): Promise<void>;
+  /** Read bytes, or null when missing. */
+  getArrayBuffer(key: string): Promise<ArrayBuffer | null>;
+  /** Read response-style headers (content-type etc.), or null when missing. */
+  getMetadataHeaders(key: string): Promise<Record<string, string> | null>;
+  delete(key: string): Promise<void>;
+}
+
 /** Result shape mirroring `D1Result`: `results` plus execution metadata. */
 export interface SqlQueryResult<Results> {
   results: Results;

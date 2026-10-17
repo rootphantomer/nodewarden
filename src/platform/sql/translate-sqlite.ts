@@ -181,6 +181,9 @@ export function translateSqliteToMysql(sql: string): string {
   out = out.replace(/strftime\s*\(\s*'%s'\s*,\s*'now'\s*\)/gi, 'UNIX_TIMESTAMP()');
   out = out.replace(/\bINSERT\s+OR\s+IGNORE\s+INTO\b/gi, 'INSERT IGNORE INTO');
   out = out.replace(/\bINSERT\s+OR\s+REPLACE\s+INTO\b/gi, 'REPLACE INTO');
+  // CAST(... AS INTEGER): MySQL needs SIGNED/UNSIGNED; SIGNED parses the
+  // same leading-integer prefix SQLite casts from mixed strings.
+  out = out.replace(/CAST\s*\(([^()]*?)\s+AS\s+INTEGER\s*\)/gi, 'CAST($1 AS SIGNED)');
   out = translateUpsert(out);
   out = translateReservedIdentifiers(out);
   return out;

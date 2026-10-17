@@ -48,7 +48,7 @@ import { StorageService } from '../services/storage';
 import { AuthService } from '../services/auth';
 import { auditRequestMetadata, writeAuditEvent } from '../services/audit-events';
 import { getBlobObject } from '../services/blob-store';
-import { notifyUserBackupProgress, notifyUserBackupRestoreProgress } from '../durable/notifications-hub';
+import { notifyUserBackupProgress, notifyUserBackupRestoreProgress } from '../services/backup-progress-notify';
 import { getMultipartRequestMaxBytes } from '../utils/direct-upload';
 import { verifyPasskeyUserVerificationToken } from '../utils/user-verification-token';
 import { unzipSync } from 'fflate';

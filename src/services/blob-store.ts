@@ -1,4 +1,5 @@
 import { Env } from '../types';
+import type { PlatformBlobBackend } from '../platform/types';
 
 const DEFAULT_CONTENT_TYPE = 'application/octet-stream';
 export const KV_MAX_OBJECT_BYTES = 25 * 1024 * 1024;
@@ -29,10 +30,15 @@ function hasKvStorage(env: Env): env is Env & { ATTACHMENTS_KV: KVNamespace } {
   return !!env.ATTACHMENTS_KV;
 }
 
-export function getBlobStorageKind(env: Env): 'r2' | 'kv' | null {
+function hasPlatformBlobStorage(env: Env): env is Env & { ATTACHMENTS_BLOB: PlatformBlobBackend } {
+  return !!env.ATTACHMENTS_BLOB;
+}
+
+export function getBlobStorageKind(env: Env): 'r2' | 'kv' | 'blob' | null {
   // Keep R2 as preferred backend when both are bound.
   if (hasR2Storage(env)) return 'r2';
   if (hasKvStorage(env)) return 'kv';
+  if (hasPlatformBlobStorage(env)) return 'blob';
   return null;
 }
 
@@ -80,6 +86,22 @@ export async function putBlobObject(
     return;
   }
 
+  if (hasPlatformBlobStorage(env)) {
+    if (options.size > KV_MAX_OBJECT_BYTES) {
+      throw new Error('Blob object too large');
+    }
+    const valueBytes: ArrayBuffer = typeof value === 'string'
+      ? new TextEncoder().encode(value).buffer as ArrayBuffer
+      : value instanceof ArrayBuffer
+        ? value
+        : (await new Response(value as BodyInit).arrayBuffer());
+    await env.ATTACHMENTS_BLOB.set(key, valueBytes, {
+      contentType,
+      customMetadata: options.customMetadata || null,
+    });
+    return;
+  }
+
   throw new Error('Attachment storage is not configured');
 }
 
@@ -109,6 +131,17 @@ export async function getBlobObject(env: Env, key: string): Promise<BlobObject |
     };
   }
 
+  if (hasPlatformBlobStorage(env)) {
+    const bytes = await env.ATTACHMENTS_BLOB.getArrayBuffer(key);
+    if (!bytes) return null;
+    const headers = await env.ATTACHMENTS_BLOB.getMetadataHeaders(key);
+    return {
+      body: new Response(bytes).body,
+      size: bytes.byteLength,
+      contentType: headers?.['content-type'] || headers?.['Content-Type'] || DEFAULT_CONTENT_TYPE,
+    };
+  }
+
   return null;
 }
 
@@ -120,5 +153,8 @@ export async function deleteBlobObject(env: Env, key: string): Promise<void> {
   if (hasKvStorage(env)) {
     await env.ATTACHMENTS_KV.delete(key);
     return;
+  }
+  if (hasPlatformBlobStorage(env)) {
+    await env.ATTACHMENTS_BLOB.delete(key);
   }
 }

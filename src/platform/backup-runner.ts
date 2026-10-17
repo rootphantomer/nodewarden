@@ -1,8 +1,9 @@
 import type { Env } from '../types';
 import type { BackupRunnerPort } from './types';
+import { handleBackupTransferRequest } from '../handlers/backup-transfer-dispatch';
+import { createDatabaseJobLease } from '../services/job-lease';
 
-const DEGRADED_RUNNER_MESSAGE =
-  'Backup transfer runs require the Cloudflare Durable Objects runtime and are unavailable on this platform';
+const RUNNER_INTERNAL_URL = 'https://backup-transfer';
 
 /**
  * Cloudflare default: dispatches the internal `https://backup-transfer/internal/*`
@@ -22,18 +23,23 @@ export function createDurableObjectBackupRunner(
 }
 
 /**
- * Degraded default for platforms without Durable Objects. Returns a plain
- * `503` so every caller's existing `response.ok` / error-body handling turns
- * into a well-defined "backup unavailable" error instead of hanging or
- * crashing on an undefined namespace.
+ * Fallback for platforms without Durable Objects (EdgeOne, tests): executes
+ * the same `/internal/*` endpoints inline in the request thread, backed by a
+ * config-row CAS lease for the job serialization the DO would provide.
+ *
+ * Limits versus the DO runtime: the work shares the platform function's CPU/
+ * wall-clock budget (EdgeOne maxDuration), and download/restore streaming is
+ * buffered rather than out-of-context — acceptable for the default backup
+ * schedule sizes.
  */
-export function createDegradedBackupRunner(): BackupRunnerPort {
+export function createInlineBackupRunner(env: Env): BackupRunnerPort {
   return {
-    async dispatch(): Promise<Response> {
-      return Response.json(
-        { error: DEGRADED_RUNNER_MESSAGE },
-        { status: 503, headers: { 'Cache-Control': 'no-store' } }
-      );
+    async dispatch(_runnerName, input, init): Promise<Response> {
+      const url = input.startsWith(`${RUNNER_INTERNAL_URL}/`)
+        ? input
+        : `${RUNNER_INTERNAL_URL}${input.startsWith('/') ? '' : '/'}${input}`;
+      const request = new Request(url, init);
+      return handleBackupTransferRequest(env, request, createDatabaseJobLease(env.DB));
     },
   };
 }
@@ -41,5 +47,5 @@ export function createDegradedBackupRunner(): BackupRunnerPort {
 /** Resolve the runner implementation from whatever the current platform provides. */
 export function getBackupRunner(env: Env): BackupRunnerPort {
   if (env.BACKUP_TRANSFER_RUNNER) return createDurableObjectBackupRunner(env.BACKUP_TRANSFER_RUNNER);
-  return createDegradedBackupRunner();
+  return createInlineBackupRunner(env);
 }

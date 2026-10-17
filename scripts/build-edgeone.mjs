@@ -57,7 +57,7 @@ const commonOptions = {
   target: 'node18',
   charset: 'utf8',
   legalComments: 'none',
-  external: ['mysql2'],
+  external: ['mysql2', '@edgeone/pages-blob'],
   alias: {
     'cloudflare:workers': path.join(root, 'src/platform/shims/cloudflare-workers.ts'),
   },

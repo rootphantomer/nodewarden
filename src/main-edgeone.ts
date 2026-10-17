@@ -17,6 +17,7 @@
  */
 import type { Env } from './types';
 import { createMysqlDatabase } from './platform/mysql/mysql-database';
+import { createEdgeOneBlobBackend } from './platform/edgeone/attachments';
 import { StorageService } from './services/storage';
 import { applyCors, jsonResponse } from './utils/response';
 import { handleRequest } from './router';
@@ -63,6 +64,14 @@ export function createEdgeOneEnv(
     DB: createMysqlDatabase({ connectionUri: mysqlUri }),
     JWT_SECRET: jwtSecret,
   } as unknown as Env;
+
+  // Attachment / send-file storage via EdgeOne Blob (opt-out with the
+  // namespace variable set to 'off'); blob-store still prefers R2/KV when
+  // those bindings exist so this stays a no-op on Cloudflare.
+  const blobNamespace = readVar(context, 'ATTACHMENTS_BLOB_NAMESPACE') || 'nodewarden-attachments';
+  if (blobNamespace.toLowerCase() !== 'off') {
+    env.ATTACHMENTS_BLOB = createEdgeOneBlobBackend(blobNamespace);
+  }
 
   const optionalVariables: Array<[string, string]> = [
     ['INTERNAL_ACCESS_TOKEN', 'INTERNAL_ACCESS_TOKEN'],

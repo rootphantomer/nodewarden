@@ -1,4 +1,6 @@
 // Environment bindings
+import type { PlatformBlobBackend } from '../platform/types';
+
 export interface Env {
   DB: D1Database;
   // Durable Object bindings: required on Cloudflare, optional for other
@@ -14,6 +16,9 @@ export interface Env {
   ATTACHMENTS?: R2Bucket;
   // Optional fallback for attachment/send file storage (no credit card required).
   ATTACHMENTS_KV?: KVNamespace;
+  // Platform-neutral blob backend for non-Cloudflare targets (EdgeOne etc.);
+  // consulted when neither R2 nor KV is bound.
+  ATTACHMENTS_BLOB?: PlatformBlobBackend;
   JWT_SECRET: string;
   WEBAUTHN_RP_ID?: string;
   WEBAUTHN_RP_NAME?: string;

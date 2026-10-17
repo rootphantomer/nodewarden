@@ -14,10 +14,12 @@ export { getSqlEngine } from './engine';
 export { translateSqliteToMysql, translateUpsert } from './sql/translate-sqlite';
 export type { MysqlStatementTranslation } from './sql/mysql-statements';
 export {
-  createDegradedBackupRunner,
+  createInlineBackupRunner,
   createDurableObjectBackupRunner,
   getBackupRunner,
 } from './backup-runner';
+export { createDatabaseJobLease, type JobLease } from '../services/job-lease';
+export type { PlatformBlobBackend } from './types';
 export {
   createDegradedNotificationsHub,
   createDurableObjectNotificationsHub,

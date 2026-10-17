@@ -136,6 +136,32 @@ test('sqlite_master table-existence probe becomes INFORMATION_SCHEMA.TABLES', ()
   }
 });
 
+test('job lease upsert keeps the CAS guard and parses CAST AS SIGNED', () => {
+  // The database job lease (src/services/job-lease.ts) acquires via a single
+  // CAS upsert whose guard compares the leading numeric prefix of the value.
+  const input = 'INSERT INTO config(key, value) VALUES(?, ?) '
+    + 'ON CONFLICT(key) DO UPDATE SET value = ? WHERE CAST(value AS INTEGER) < ?';
+  const out = translateStatementForMysql(input);
+  assert.equal(out.kind, 'pass');
+  if (out.kind === 'pass') {
+    assert.match(out.sql, /AS new ON DUPLICATE KEY UPDATE/);
+    assert.match(out.sql, /CAST\(`value` AS SIGNED\) < \?/);
+    assert.doesNotMatch(out.sql, /AS INTEGER/);
+    // Four question marks: VALUES(?, ?) + SET value = ? + guard < ?
+    assert.equal((out.sql.match(/\?/g) || []).length, 4);
+  }
+});
+
+test('job lease touch/release updates keep value equality guards', () => {
+  const input = 'UPDATE config SET value = ? WHERE key = ? AND value = ?';
+  const out = translateStatementForMysql(input);
+  assert.equal(out.kind, 'pass');
+  if (out.kind === 'pass') {
+    assert.match(out.sql, /UPDATE config SET `value` = \? WHERE `key` = \? AND `value` = \?/);
+  }
+});
+
+
 test('sqlite_master DDL-text query is reported unsupported', () => {
   const out = translateStatementForMysql("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?");
   assert.equal(out.kind, 'unsupported');
