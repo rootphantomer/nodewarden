@@ -126,6 +126,7 @@ export enum CipherType {
   BankAccount = 6,
   DriversLicense = 7,
   Passport = 8,
+  // NodeWarden extension: standalone authenticator entry (not in the upstream Bitwarden enum yet).
   Totp = 9,
 }
 

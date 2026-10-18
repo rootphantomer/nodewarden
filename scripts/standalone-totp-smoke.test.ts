@@ -1,4 +1,4 @@
-// Temporary smoke test for the standalone TOTP (CipherType.Totp = 9) feature.
+// Smoke test for the standalone TOTP (CipherType.Totp = 9) feature.
 // Uses the same harness conventions as scripts/vault-compatibility.test.ts.
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
@@ -6,12 +6,15 @@ import { DatabaseSync } from 'node:sqlite';
 import { StorageService } from '../src/services/storage';
 import { handleAuthenticatedRoute } from '../src/router-authenticated';
 import { cipherToResponse, validateCipherEncryptedFieldsForCompatibility, isCipherResponseSyncCompatible } from '../src/handlers/ciphers';
-import { bytesToBase64, encryptBw, decryptStr } from '../webapp/src/lib/crypto';
+import { bytesToBase64, calcTotpNow, encryptBw, decryptStr, parseOtpAuthMetadata } from '../webapp/src/lib/crypto';
 import { decryptSingleCipher } from '../webapp/src/lib/decrypt-cipher';
-import { calcTotpNow } from '../webapp/src/lib/crypto';
-import { createCipher, updateCipher, buildCipherImportPayload } from '../webapp/src/lib/api/vault';
+import { createCipher, updateCipher } from '../webapp/src/lib/api/vault';
 import { createEmptyDraft, draftFromCipher, getCreateTypeOptions } from '../webapp/src/components/vault/vault-page-helpers';
-import { summarizeImportResult } from '../webapp/src/lib/app-support';
+import { importCipherToDraft, summarizeImportResult } from '../webapp/src/lib/app-support';
+import { buildPlainBitwardenJsonDocument, buildBitwardenCsvString, buildAccountEncryptedBitwardenJsonString } from '../webapp/src/lib/export-formats';
+import { normalizeBitwardenImport } from '../webapp/src/lib/import-formats-bitwarden';
+import { parseBitwardenCsv } from '../webapp/src/lib/import-formats-browser';
+import { optimisticCipherFromDraft } from '../webapp/src/hooks/useVaultSendActions';
 
 const owner = '00000000-0000-4000-8000-000000000001';
 const revision = '2026-10-08T00:00:00.000Z';
@@ -38,6 +41,8 @@ async function fixture(ctx: TestContext) {
       folder_id TEXT, name TEXT, notes TEXT, favorite INTEGER, data TEXT,
       reprompt INTEGER, key TEXT, created_at TEXT, updated_at TEXT,
       archived_at TEXT, deleted_at TEXT);
+    CREATE TABLE folders(id TEXT PRIMARY KEY, user_id TEXT, name TEXT,
+      created_at TEXT, updated_at TEXT);
     CREATE TABLE attachments(id TEXT PRIMARY KEY, cipher_id TEXT,
       file_name TEXT, size INTEGER, size_name TEXT, key TEXT);
     CREATE TABLE devices(user_id TEXT, push_token TEXT);
@@ -55,6 +60,11 @@ async function fixture(ctx: TestContext) {
       return statement;
     },
     exec(sql: string) { sqlite.exec(sql); return true; },
+    async batch(statements: Array<{ run: () => Promise<unknown> }>) {
+      const results: unknown[] = [];
+      for (const statement of statements) results.push(await statement.run());
+      return results;
+    },
   };
   ctx.mock.method(StorageService.prototype, 'updateRevisionDate', async () => revision);
   ctx.mock.method(StorageService.prototype, 'createAuditLog', async () => {});
@@ -254,4 +264,125 @@ test('switching the type clears the standalone object server-side and disables l
   assert.equal(stored.totp, null, 'totp object must be nulled after type switch');
   const redecrypted = await decryptSingleCipher(updated, enc, mac);
   assert.equal(redecrypted.login?.decTotp, 'JBSWY3DPEHPK3PXP');
+});
+
+test('exports keep standalone TOTP data across JSON, encrypted JSON and CSV round trips', async (ctx) => {
+  const f = await fixture(ctx);
+  const draft = createEmptyDraft(9);
+  draft.name = 'Export me';
+  draft.totpSecret = 'JBSWY3DPEHPK3PXP';
+  draft.totpIssuer = 'GitHub';
+  draft.totpAccountName = 'demo@example.com';
+  const created = await createCipher((path, init) => f.route(path, init!.method!, JSON.parse(init!.body as string)), session, draft);
+  const stored: any = await f.storage.getCipher(created.id);
+  const exportArgs = {
+    ciphers: [stored],
+    folders: [],
+    userEncB64: session.symEncKey,
+    userMacB64: session.symMacKey,
+  };
+
+  const plainDoc = await buildPlainBitwardenJsonDocument(exportArgs);
+  const plainItem = (plainDoc.items as any[])[0];
+  assert.deepEqual(plainItem.totp, {
+    secret: 'JBSWY3DPEHPK3PXP',
+    issuer: 'GitHub',
+    accountName: 'demo@example.com',
+  });
+
+  const encryptedDoc = JSON.parse(await buildAccountEncryptedBitwardenJsonString(exportArgs)) as any;
+  assert.deepEqual(encryptedDoc.items[0].totp, {
+    secret: stored.totp.secret,
+    issuer: stored.totp.issuer,
+    accountName: stored.totp.accountName,
+  });
+
+  // Bitwarden JSON import keeps the plaintext totp object.
+  const imported = normalizeBitwardenImport(plainDoc);
+  assert.equal(imported.ciphers[0].type, 9);
+  const importedDraft = importCipherToDraft(imported.ciphers[0], null);
+  assert.equal(importedDraft.totpSecret, 'JBSWY3DPEHPK3PXP');
+  assert.equal(importedDraft.totpIssuer, 'GitHub');
+  assert.equal(importedDraft.totpAccountName, 'demo@example.com');
+
+  // CSV export/import must restore type 9 instead of downgrading it to a note.
+  const csv = buildBitwardenCsvString(plainDoc);
+  const csvCipher = parseBitwardenCsv(csv).ciphers.find((cipher) => Number(cipher.type) === 9) as any;
+  assert.ok(csvCipher, 'the CSV row must round-trip as a standalone TOTP entry');
+  assert.deepEqual(csvCipher.totp, {
+    secret: 'JBSWY3DPEHPK3PXP',
+    issuer: 'GitHub',
+    accountName: 'demo@example.com',
+  });
+});
+
+test('non-TOTP item types drop a stray top-level totp object on create and import', async (ctx) => {
+  const f = await fixture(ctx);
+  const secret = await encrypt('JBSWY3DPEHPK3PXP');
+  const login = { username: await encrypt('user'), password: await encrypt('pass'), totp: null, uris: null };
+
+  const createResponse = await f.route('/api/ciphers', 'POST', {
+    type: 1,
+    name: await encrypt('Login with stray totp'),
+    login,
+    totp: { secret, issuer: null, accountName: null },
+  });
+  assert.equal(createResponse.status, 200);
+  const created = await createResponse.json() as any;
+  const storedAfterCreate: any = await f.storage.getCipher(created.id);
+  assert.equal(storedAfterCreate.type, 1);
+  assert.equal(storedAfterCreate.totp, null, 'create must not persist totp outside type 9');
+
+  const importedName = await encrypt('Imported login with stray totp');
+  const importResponse = await f.route('/api/ciphers/import', 'POST', {
+    ciphers: [{
+      type: 1,
+      name: importedName,
+      login,
+      totp: { secret, issuer: null, accountName: null },
+    }],
+    folders: [],
+    folderRelationships: [],
+  });
+  assert.equal(importResponse.status, 200);
+  const storedAfterImport = (await f.storage.getAllCiphers(owner)).find((cipher) => cipher.name === importedName) as any;
+  assert.ok(storedAfterImport, 'the imported cipher must be stored');
+  assert.equal(storedAfterImport.type, 1);
+  assert.equal(storedAfterImport.totp, null, 'import must not persist totp outside type 9');
+});
+
+test('otpauth QR payloads populate issuer and account metadata', () => {
+  assert.deepEqual(
+    parseOtpAuthMetadata('otpauth://totp/GitHub:demo%40example.com?secret=JBSWY3DPEHPK3PXP&issuer=GitHub'),
+    { issuer: 'GitHub', accountName: 'demo@example.com' }
+  );
+  assert.deepEqual(
+    parseOtpAuthMetadata('otpauth://totp/ACME%3Aalice%40example.com?secret=JBSWY3DPEHPK3PXP'),
+    { issuer: 'ACME', accountName: 'alice@example.com' }
+  );
+  assert.deepEqual(parseOtpAuthMetadata('JBSWY3DPEHPK3PXP'), { issuer: '', accountName: '' });
+});
+
+test('optimistic updates show edited standalone TOTP values immediately', () => {
+  const current = {
+    id: 'cipher-1',
+    type: 9,
+    name: 'Old name',
+    totp: { secret: 'OLD', issuer: 'Old', accountName: 'old@example.com', decSecret: 'OLDSECRET' },
+  } as any;
+  const draft = createEmptyDraft(9);
+  draft.name = 'Edited';
+  draft.totpSecret = 'JBSWY3DPEHPK3PXP';
+  draft.totpIssuer = 'GitHub';
+  draft.totpAccountName = 'demo@example.com';
+
+  const optimistic = optimisticCipherFromDraft(draft, current);
+  assert.equal(optimistic.totp?.secret, 'JBSWY3DPEHPK3PXP');
+  assert.equal(optimistic.totp?.issuer, 'GitHub');
+  assert.equal(optimistic.totp?.accountName, 'demo@example.com');
+  assert.equal(optimistic.totp?.decSecret, 'JBSWY3DPEHPK3PXP');
+
+  draft.type = 1;
+  const asLogin = optimisticCipherFromDraft(draft, current);
+  assert.equal(asLogin.totp, null, 'switching to a login clears the optimistic TOTP object');
 });

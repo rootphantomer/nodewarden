@@ -1003,7 +1003,9 @@ export async function handleCreateCipher(request: Request, env: Env, userId: str
   cipher.bankAccount = createBankAccount.present ? (createBankAccount.value ?? null) : ((cipher as any).bankAccount ?? null);
   cipher.driversLicense = createDriversLicense.present ? (createDriversLicense.value ?? null) : ((cipher as any).driversLicense ?? null);
   cipher.passport = createPassport.present ? (createPassport.value ?? null) : ((cipher as any).passport ?? null);
-  cipher.totp = createTotp.present ? (createTotp.value ?? null) : ((cipher as any).totp ?? null);
+  cipher.totp = Number(cipher.type) === 9
+    ? (createTotp.present ? (createTotp.value ?? null) : ((cipher as any).totp ?? null))
+    : null;
   cipher.passwordHistory = createPasswordHistory.present ? (createPasswordHistory.value ?? null) : (cipher.passwordHistory ?? null);
   const createFields = getAliasedProp(cipherData, ['fields', 'Fields']);
   cipher.fields = createFields.present ? (createFields.value ?? null) : (cipher.fields ?? null);

@@ -4,7 +4,7 @@ import { ArrowDown, ArrowUp, CheckCheck, Download, Paperclip, Plus, QrCode, Refr
 import jsQR from 'jsqr';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useDialogLifecycle } from '@/components/ConfirmDialog';
-import { normalizeTotpInput } from '@/lib/crypto';
+import { normalizeTotpInput, parseOtpAuthMetadata } from '@/lib/crypto';
 import type { Cipher, Folder, VaultDraft, VaultDraftField } from '@/lib/types';
 import { t } from '@/lib/i18n';
 import { cardBrand } from '@/lib/import-format-shared';
@@ -165,7 +165,12 @@ export default function VaultEditor(props: VaultEditorProps) {
     const normalized = normalizeTotpInput(value);
     if (!normalized) return false;
     if (props.draft.type === 9) {
-      props.onUpdateDraft({ totpSecret: normalized });
+      const metadata = parseOtpAuthMetadata(normalized);
+      props.onUpdateDraft({
+        totpSecret: normalized,
+        ...(metadata.issuer ? { totpIssuer: metadata.issuer } : {}),
+        ...(metadata.accountName ? { totpAccountName: metadata.accountName } : {}),
+      });
     } else {
       props.onUpdateDraft({ loginTotp: normalized });
     }

@@ -197,12 +197,13 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
     const fields = readAliasedImportProp<any[] | null>(c, ['fields', 'Fields']);
     const passwordHistory = readAliasedImportProp<any[] | null>(c, ['passwordHistory', 'PasswordHistory']);
     const key = readAliasedImportProp<string | null>(c, ['key', 'Key']);
+    const importedType = Number(c.type) || 1;
 
     const cipher: Cipher = {
       ...c,
       id: generateUUID(),
       userId: userId,
-      type: c.type as CipherType,
+      type: importedType as CipherType,
       folderId: folderId,
       name: c.name ?? 'Untitled',
       notes: c.notes ?? null,
@@ -267,7 +268,7 @@ export async function handleCiphersImport(request: Request, env: Env, userId: st
       bankAccount: bankAccount ?? null,
       driversLicense: driversLicense ?? null,
       passport: passport ?? null,
-      totp: totp ?? null,
+      totp: importedType === 9 ? (totp ?? null) : null,
       key: key ?? null,
       createdAt: now,
       updatedAt: now,
