@@ -46,7 +46,6 @@ tmp/
 nodewarden-wiki/
 nodewarden.wiki/
 wiki/
-AGENTS.md
 settings.json
 .claude/
 NodeWarden-compat/
