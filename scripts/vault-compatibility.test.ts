@@ -102,6 +102,11 @@ for (const method of ['PUT', 'POST']) {
     assert.equal(body.data[0].id, id);
     assert.equal(body.data[0].deletedDate, null);
     assert.equal(body.data[0].attachments[0].id, attachmentId);
+    // Official clients expect an absolute attachment URL, not a bare path.
+    assert.equal(
+      body.data[0].attachments[0].url,
+      `https://vault.example.test/api/ciphers/${id}/attachment/${attachmentId}`
+    );
     assert.deepEqual(f.deletedBlobs, []);
     const empty: any = await (await f.route('/api/ciphers/restore', method, { ids: [] })).json();
     assert.deepEqual(empty.data, []);
