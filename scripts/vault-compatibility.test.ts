@@ -461,3 +461,36 @@ test('userDecryption compat mirror carries the same unlock data as the PascalCas
   assert.equal(withoutPasskeys.webAuthnPrfOption, null);
   assert.equal(withoutPasskeys.userKeyId, null);
 });
+
+test('legacy single login.uri is folded into uris and no longer emitted', async (ctx) => {
+  const f = await fixture(ctx);
+  const legacyUri = await encrypt('https://legacy.example');
+  const legacyUsername = await encrypt('legacy user');
+  // Older exports and clients stored one URI in `login.uri`; the official shape
+  // only has `uris`, so the response must migrate it instead of dropping it.
+  await f.storage.saveCipher({
+    ...f.base,
+    login: { Username: legacyUsername, uri: legacyUri },
+  });
+
+  const body: any = await (await f.route(`/api/ciphers/${id}`, 'GET')).json();
+  assert.equal('uri' in body.login, false);
+  assert.deepEqual(body.login.uris, [{ uri: legacyUri, uriChecksum: null }]);
+  assert.equal(body.login.username, legacyUsername);
+});
+
+test('uris takes precedence over legacy login.uri and the alias is dropped', async (ctx) => {
+  const f = await fixture(ctx);
+  const legacyUri = await encrypt('https://legacy.example');
+  const modernUri = await encrypt('https://modern.example');
+  await f.storage.saveCipher({
+    ...f.base,
+    login: { Uri: legacyUri, uris: [{ uri: modernUri, match: 0 }] },
+  });
+
+  const body: any = await (await f.route(`/api/ciphers/${id}`, 'GET')).json();
+  assert.equal('uri' in body.login, false);
+  assert.equal(body.login.uris.length, 1);
+  assert.equal(body.login.uris[0].uri, modernUri);
+  assert.equal(body.login.uris[0].match, 0);
+});

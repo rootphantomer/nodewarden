@@ -454,10 +454,18 @@ export function normalizeCipherLoginForCompatibility(
     uri: 10000,
   });
   if (!next) return null;
+  const legacyUri = next.uri;
   next.uris = normalizeCipherLoginUrisForCompatibility(next.uris, {
     requiresUriChecksum,
     preserveRepairableUris,
   });
+  // Older clients and exports carried a single `login.uri`; official clients
+  // dropped it in favour of `uris`. Fold it into `uris` before removing it so
+  // responses can match the official shape without hiding a saved URL.
+  if (!next.uris && isValidEncString(legacyUri)) {
+    next.uris = [{ uri: String(legacyUri).trim(), uriChecksum: null }];
+  }
+  delete next.uri;
   next.fido2Credentials = normalizeFido2CredentialsForCompatibility(next.fido2Credentials);
   return next;
 }
