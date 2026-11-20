@@ -58,9 +58,27 @@ export function buildUserDecryptionOptions(
   };
 }
 
+function toCompatWebAuthnPrfOption(option: WebAuthnPrfDecryptionOption): Record<string, unknown> {
+  const source = option as unknown as Record<string, unknown>;
+  return {
+    encryptedPrivateKey: source.EncryptedPrivateKey ?? source.encryptedPrivateKey ?? null,
+    encryptedUserKey: source.EncryptedUserKey ?? source.encryptedUserKey ?? null,
+    credentialId: source.CredentialId ?? source.credentialId ?? null,
+    transports: source.Transports ?? source.transports ?? [],
+    object: 'webAuthnPrfDecryptionOption',
+  };
+}
+
+// camelCase mirror of the PascalCase `UserDecryption` payload. Both spellings are
+// emitted for client compatibility, so they must carry the same data: a
+// case-sensitive client reading `userDecryption` would otherwise lose the
+// WebAuthn PRF unlock options and the user key id.
 export function buildUserDecryptionCompat(
-  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism'>
+  user: Pick<User, 'email' | 'key' | 'kdfType' | 'kdfIterations' | 'kdfMemory' | 'kdfParallelism'>,
+  webAuthnPrfOptions: WebAuthnPrfDecryptionOption[] = [],
+  userKeyId: string | null = null
 ): Record<string, unknown> {
+  const prfOptions = webAuthnPrfOptions.map(toCompatWebAuthnPrfOption);
   return {
     masterPasswordUnlock: {
       kdf: {
@@ -72,6 +90,14 @@ export function buildUserDecryptionCompat(
       masterKeyWrappedUserKey: user.key,
       masterKeyEncryptedUserKey: user.key,
       salt: user.email.toLowerCase(),
+      object: 'masterPasswordUnlock',
     },
+    trustedDeviceOption: null,
+    keyConnectorOption: null,
+    webAuthnPrfOption: prfOptions[0] ?? null,
+    webAuthnPrfOptions: prfOptions,
+    v2UpgradeToken: null,
+    userKeyId,
+    object: 'userDecryption',
   };
 }
