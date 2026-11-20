@@ -37,6 +37,8 @@ import { readNullableFullUpdateField } from './cipher-full-update';
 export interface CipherResponseOptions {
   preserveRepairableUris?: boolean;
   validFolderIds?: ReadonlySet<string>;
+  /** Origin used to build absolute attachment URLs; official clients expect a full URL. */
+  attachmentBaseUrl?: string;
 }
 
 export function shouldPreserveRepairableCipherUris(request: Request): boolean {
@@ -44,7 +46,10 @@ export function shouldPreserveRepairableCipherUris(request: Request): boolean {
 }
 
 function cipherResponseOptionsForRequest(request: Request): CipherResponseOptions {
-  return { preserveRepairableUris: shouldPreserveRepairableCipherUris(request) };
+  return {
+    preserveRepairableUris: shouldPreserveRepairableCipherUris(request),
+    attachmentBaseUrl: new URL(request.url).origin,
+  };
 }
 
 function normalizeOptionalId(value: unknown): string | null {
@@ -656,8 +661,9 @@ function normalizeCipherSecureNoteForCompatibility(secureNote: any): CipherSecur
 }
 
 // Format attachments for API response
-export function formatAttachments(attachments: Attachment[]): any[] | null {
+export function formatAttachments(attachments: Attachment[], baseUrl?: string): any[] | null {
   if (attachments.length === 0) return null;
+  const origin = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
   const formatted = attachments
     .filter((a) => isValidEncString(a.fileName))
     .map(a => ({
@@ -667,7 +673,9 @@ export function formatAttachments(attachments: Attachment[]): any[] | null {
       size: String(Number(a.size) || 0),
       sizeName: a.sizeName,
       key: optionalEncString(a.key),
-      url: `/api/ciphers/${a.cipherId}/attachment/${a.id}`,  // Android requires non-null url!
+      // Android requires a non-null url, and the official server returns an
+      // absolute one; keep the path when no request origin is available.
+      url: `${origin}/api/ciphers/${a.cipherId}/attachment/${a.id}`,
       object: 'attachment',
     }));
   return formatted.length ? formatted : null;
@@ -978,7 +986,7 @@ export function cipherToResponse(
     permissions: responsePermissions,
     object: 'cipherDetails',
     collectionIds: Array.isArray((passthrough as any).collectionIds) ? (passthrough as any).collectionIds : [],
-    attachments: formatAttachments(responseAttachments),
+    attachments: formatAttachments(responseAttachments, options.attachmentBaseUrl),
     name: isValidEncString(cipher.name) ? cipher.name.trim() : cipher.name,
     notes: optionalEncString(cipher.notes),
     login: normalizedLogin,

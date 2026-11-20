@@ -94,7 +94,11 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
 
   const cipherResponses: CipherResponse[] = [];
   for (const cipher of ciphers) {
-    const response = cipherToResponse(cipher, attachmentsByCipher.get(cipher.id) || [], { preserveRepairableUris, validFolderIds });
+    const response = cipherToResponse(cipher, attachmentsByCipher.get(cipher.id) || [], {
+      preserveRepairableUris,
+      validFolderIds,
+      attachmentBaseUrl: new URL(request.url).origin,
+    });
     if (isCipherResponseSyncCompatible(response)) {
       cipherResponses.push(response);
     }

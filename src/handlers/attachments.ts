@@ -232,7 +232,9 @@ export async function handleCreateAttachment(
     attachmentId: attachmentId,
     url: buildDirectUploadUrl(request, `/api/ciphers/${cipherId}/attachment/${attachmentId}`, uploadToken),
     fileUploadType: 1,
-    cipherResponse: cipherToResponse(updatedCipher!, attachments),
+    cipherResponse: cipherToResponse(updatedCipher!, attachments, {
+      attachmentBaseUrl: new URL(request.url).origin,
+    }),
   });
 }
 
@@ -504,7 +506,9 @@ export async function handleDeleteAttachment(
   // Get updated cipher for response
   const updatedCipher = await storage.getCipherForUser(cipherId, userId);
   const attachments = await storage.getAttachmentsByCipher(cipherId);
-  const cipherResponse = cipherToResponse(updatedCipher!, attachments);
+  const cipherResponse = cipherToResponse(updatedCipher!, attachments, {
+    attachmentBaseUrl: new URL(request.url).origin,
+  });
 
   return jsonResponse({
     Cipher: cipherResponse,
