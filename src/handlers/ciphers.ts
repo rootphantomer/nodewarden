@@ -302,6 +302,7 @@ const PASSPORT_ENCRYPTED_KEYS = [
 ] as const;
 
 function normalizeCipherForStorage(cipher: Cipher): Cipher {
+  Object.assign(cipher, canonicalizeCipherNestedAliases(cipher));
   cipher.login = normalizeCipherLoginForStorage(cipher.login);
   cipher.sshKey = normalizeCipherSshKeyForCompatibility(cipher.sshKey);
   cipher.folderId = normalizeOptionalId(cipher.folderId);
@@ -313,31 +314,78 @@ function normalizeCipherForStorage(cipher: Cipher): Cipher {
 }
 
 // Bitwarden's JSON shape is camelCase, but some third-party clients send the
-// PascalCase aliases inside `login` (rbw writes Username/Password/Totp/Uris).
+// PascalCase aliases (rbw writes Username/Password/Totp/Uris inside `login`).
 // Storing those next to the camelCase fields makes the sync payload carry the
 // same logical field twice, and strict clients reject the whole response
 // (duplicate field `Uris`), which locks them out of the vault permanently.
 // Canonicalize to camelCase, preferring the camelCase value when a client sends
 // both, and apply it on the response path too so rows written before this fix
-// stop breaking sync.
-const CIPHER_LOGIN_KEY_ALIASES: Record<string, string> = {
-  Username: 'username',
-  Password: 'password',
-  Totp: 'totp',
-  Uri: 'uri',
-  Uris: 'uris',
-};
+// stop breaking sync. Matching is case-insensitive so spellings such as `SSN`,
+// `RpId` or `KeyValue` also fold onto their official camelCase key.
+const CIPHER_LOGIN_KEYS = [
+  'username',
+  'password',
+  'passwordRevisionDate',
+  'totp',
+  'uri',
+  'uris',
+  'autofillOnPageLoad',
+  'httpAuthenticationEnabled',
+  'fido2Credentials',
+] as const;
 
-const CIPHER_LOGIN_URI_KEY_ALIASES: Record<string, string> = {
-  Uri: 'uri',
-  UriChecksum: 'uriChecksum',
-  Match: 'match',
-};
+const CIPHER_LOGIN_URI_KEYS = ['uri', 'uriChecksum', 'match'] as const;
 
-function canonicalizeAliasedKeys(source: Record<string, any>, aliases: Record<string, string>): Record<string, any> {
+const CIPHER_FIDO2_CREDENTIAL_KEYS = [
+  'credentialId',
+  'keyType',
+  'keyAlgorithm',
+  'keyCurve',
+  'keyValue',
+  'rpId',
+  'userHandle',
+  'userName',
+  'counter',
+  'rpName',
+  'userDisplayName',
+  'discoverable',
+  'creationDate',
+] as const;
+
+const CIPHER_CARD_KEYS = ['cardholderName', 'brand', 'number', 'expMonth', 'expYear', 'code'] as const;
+
+const CIPHER_IDENTITY_KEYS = [
+  'title',
+  'firstName',
+  'middleName',
+  'lastName',
+  'address1',
+  'address2',
+  'address3',
+  'city',
+  'state',
+  'postalCode',
+  'country',
+  'company',
+  'email',
+  'phone',
+  'ssn',
+  'username',
+  'passportNumber',
+  'licenseNumber',
+] as const;
+
+const CIPHER_SECURE_NOTE_KEYS = ['type'] as const;
+const CIPHER_SSH_KEY_KEYS = ['privateKey', 'publicKey', 'keyFingerprint', 'fingerprint'] as const;
+const CIPHER_FIELD_KEYS = ['name', 'value', 'type', 'linkedId'] as const;
+const CIPHER_PASSWORD_HISTORY_KEYS = ['password', 'lastUsedDate'] as const;
+
+function canonicalizeKnownKeys(source: any, knownKeys: readonly string[]): any {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return source ?? null;
+  const canonicalByLowerCase = new Map(knownKeys.map((key) => [key.toLowerCase(), key]));
   const next: Record<string, any> = {};
   for (const [key, value] of Object.entries(source)) {
-    const canonical = aliases[key] ?? key;
+    const canonical = canonicalByLowerCase.get(key.toLowerCase()) ?? key;
     // A client that sends both spellings keeps its camelCase value.
     if (canonical !== key && Object.prototype.hasOwnProperty.call(source, canonical)) continue;
     next[canonical] = value;
@@ -345,16 +393,41 @@ function canonicalizeAliasedKeys(source: Record<string, any>, aliases: Record<st
   return next;
 }
 
+function canonicalizeArrayEntries(value: any, knownKeys: readonly string[]): any {
+  if (!Array.isArray(value)) return value ?? null;
+  return value.map((entry) => canonicalizeKnownKeys(entry, knownKeys));
+}
+
 function canonicalizeCipherLoginKeys(login: any): any {
-  if (!login || typeof login !== 'object' || Array.isArray(login)) return login ?? null;
-  const next = canonicalizeAliasedKeys(login, CIPHER_LOGIN_KEY_ALIASES);
+  const next = canonicalizeKnownKeys(login, CIPHER_LOGIN_KEYS);
+  if (!next || typeof next !== 'object' || Array.isArray(next)) return next;
   if (Array.isArray(next.uris)) {
-    next.uris = next.uris.map((entry: any) => (
-      entry && typeof entry === 'object' && !Array.isArray(entry)
-        ? canonicalizeAliasedKeys(entry, CIPHER_LOGIN_URI_KEY_ALIASES)
-        : entry
-    ));
+    next.uris = next.uris.map((entry: any) => canonicalizeKnownKeys(entry, CIPHER_LOGIN_URI_KEYS));
   }
+  if (Array.isArray(next.fido2Credentials)) {
+    next.fido2Credentials = next.fido2Credentials.map((entry: any) =>
+      canonicalizeKnownKeys(entry, CIPHER_FIDO2_CREDENTIAL_KEYS)
+    );
+  }
+  return next;
+}
+
+// Fold PascalCase/case-variant aliases for every nested cipher object, not just
+// `login`. Both the storage path and the response path run through this so a row
+// written by a third-party client can never ship duplicate logical fields.
+function canonicalizeCipherNestedAliases(cipher: any): any {
+  if (!cipher || typeof cipher !== 'object' || Array.isArray(cipher)) return cipher;
+  const next = { ...cipher };
+  next.login = canonicalizeCipherLoginKeys(next.login);
+  next.card = canonicalizeKnownKeys(next.card, CIPHER_CARD_KEYS);
+  next.identity = canonicalizeKnownKeys(next.identity, CIPHER_IDENTITY_KEYS);
+  next.secureNote = canonicalizeKnownKeys(next.secureNote, CIPHER_SECURE_NOTE_KEYS);
+  next.sshKey = canonicalizeKnownKeys(next.sshKey, CIPHER_SSH_KEY_KEYS);
+  next.bankAccount = canonicalizeKnownKeys(next.bankAccount, BANK_ACCOUNT_ENCRYPTED_KEYS);
+  next.driversLicense = canonicalizeKnownKeys(next.driversLicense, DRIVERS_LICENSE_ENCRYPTED_KEYS);
+  next.passport = canonicalizeKnownKeys(next.passport, PASSPORT_ENCRYPTED_KEYS);
+  next.fields = canonicalizeArrayEntries(next.fields, CIPHER_FIELD_KEYS);
+  next.passwordHistory = canonicalizeArrayEntries(next.passwordHistory, CIPHER_PASSWORD_HISTORY_KEYS);
   return next;
 }
 
@@ -821,7 +894,8 @@ export function cipherToResponse(
   options: CipherResponseOptions = {}
 ): CipherResponse {
   // Strip internal-only fields that must not appear in the API response
-  const { userId, createdAt, updatedAt, archivedAt, deletedAt, ...passthrough } = cipher;
+  const { userId, createdAt, updatedAt, archivedAt, deletedAt, ...rawPassthrough } = cipher;
+  const passthrough = canonicalizeCipherNestedAliases(rawPassthrough);
   const responseCipherKey = optionalEncString(cipher.key);
   const normalizedLogin = normalizeCipherLoginForCompatibility(
     (passthrough as any).login ?? null,
@@ -882,6 +956,9 @@ export function cipherToResponse(
     // Server-computed / enforced fields (always override)
     folderId: normalizeResponseFolderId(cipher.folderId, options.validFolderIds),
     type: responseType,
+    // Official clients default a missing Reprompt to CipherRepromptType.None;
+    // emit it explicitly so strict clients see a stable field set.
+    reprompt: Number((passthrough as any).reprompt) || 0,
     organizationId: normalizeOptionalId((passthrough as any).organizationId ?? null),
     organizationUseTotp: !!((passthrough as any).organizationUseTotp ?? false),
     creationDate: createdAt,

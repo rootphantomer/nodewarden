@@ -4,6 +4,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { StorageService } from '../src/services/storage';
 import { handleAuthenticatedRoute } from '../src/router-authenticated';
 import { cipherToResponse } from '../src/handlers/ciphers';
+import { buildUserDecryptionCompat } from '../src/utils/user-decryption';
 import { bytesToBase64, encryptBw, decryptStr } from '../webapp/src/lib/crypto';
 import { decryptSingleCipher } from '../webapp/src/lib/decrypt-cipher';
 import { updateCipher, buildCipherImportPayload, repairCipherKeyMismatches } from '../webapp/src/lib/api/vault';
@@ -360,4 +361,103 @@ test('PascalCase login keys are canonicalized instead of duplicated, keeping cam
   assert.deepEqual(Object.keys(stored?.login ?? {}).filter((key) => /^[A-Z]/.test(key)), []);
   assert.equal(stored?.login?.username, camelUser);
   assert.deepEqual(stored?.login?.uris, [{ uri, match: 0 }]);
+});
+
+test('PascalCase aliases in card, fields and password history are canonicalized, and reprompt defaults to None', async (ctx) => {
+  const f = await fixture(ctx);
+  const cardholder = await encrypt('Card Holder');
+  const cardNumber = await encrypt('4111111111111111');
+  const fieldName = await encrypt('Linked username');
+  const historyPassword = await encrypt('old password');
+  // Third-party clients may write PascalCase aliases on any nested object, not
+  // only on login; the response must never ship both spellings of one field.
+  await f.storage.saveCipher({
+    ...f.base,
+    type: 3,
+    login: null,
+    card: { CardholderName: cardholder, Number: cardNumber, Brand: null },
+    fields: [{ Name: fieldName, Value: await encrypt('field value'), Type: 0, LinkedId: 100 }],
+    passwordHistory: [{ Password: historyPassword, LastUsedDate: '2026-01-01T00:00:00.000Z' }],
+  });
+
+  const body: any = await (await f.route(`/api/ciphers/${id}`, 'GET')).json();
+  assert.deepEqual(Object.keys(body.card).filter((key) => /^[A-Z]/.test(key)), []);
+  assert.equal(body.card.cardholderName, cardholder);
+  assert.equal(body.card.number, cardNumber);
+  assert.equal(body.card.brand, null);
+  assert.deepEqual(Object.keys(body.fields[0]).filter((key) => /^[A-Z]/.test(key)), []);
+  assert.equal(body.fields[0].name, fieldName);
+  assert.equal(body.fields[0].linkedId, 100);
+  assert.deepEqual(Object.keys(body.passwordHistory[0]).filter((key) => /^[A-Z]/.test(key)), []);
+  assert.equal(body.passwordHistory[0].password, historyPassword);
+  assert.equal(body.reprompt, 0);
+});
+
+test('PascalCase FIDO2 credential keys are canonicalized without dropping values', async (ctx) => {
+  const f = await fixture(ctx);
+  const username = await encrypt('passkey user');
+  const credentialId = await encrypt('credential id');
+  const keyValue = await encrypt('key value');
+  await f.storage.saveCipher({
+    ...f.base,
+    login: {
+      Username: username,
+      Fido2Credentials: [{
+        CredentialId: credentialId,
+        KeyType: await encrypt('public-key'),
+        KeyAlgorithm: await encrypt('ECDSA'),
+        KeyCurve: await encrypt('P-256'),
+        KeyValue: keyValue,
+        RpId: await encrypt('example.com'),
+        Counter: await encrypt('0'),
+        Discoverable: await encrypt('true'),
+        CreationDate: '2026-01-01T00:00:00.000Z',
+      }],
+    },
+  });
+
+  const body: any = await (await f.route(`/api/ciphers/${id}`, 'GET')).json();
+  assert.equal(body.login.username, username);
+  assert.equal(body.login.fido2Credentials.length, 1);
+  const credential = body.login.fido2Credentials[0];
+  assert.deepEqual(Object.keys(credential).filter((key) => /^[A-Z]/.test(key)), []);
+  assert.equal(credential.credentialId, credentialId);
+  assert.equal(credential.keyValue, keyValue);
+  assert.equal(credential.creationDate, '2026-01-01T00:00:00.000Z');
+});
+
+test('userDecryption compat mirror carries the same unlock data as the PascalCase payload', () => {
+  const user = {
+    email: 'User@Example.com',
+    key: '2.wrapped-user-key',
+    kdfType: 0,
+    kdfIterations: 600000,
+    kdfMemory: 64,
+    kdfParallelism: 4,
+  };
+  const prfOption: any = {
+    EncryptedPrivateKey: 'encrypted-private-key',
+    EncryptedUserKey: 'encrypted-user-key',
+    CredentialId: 'credential-id',
+    Transports: ['internal'],
+    Object: 'webAuthnPrfDecryptionOption',
+  };
+  const compat: any = buildUserDecryptionCompat(user, [prfOption], 'user-key-id');
+  assert.equal(compat.userKeyId, 'user-key-id');
+  assert.deepEqual(compat.webAuthnPrfOptions, [{
+    encryptedPrivateKey: 'encrypted-private-key',
+    encryptedUserKey: 'encrypted-user-key',
+    credentialId: 'credential-id',
+    transports: ['internal'],
+    object: 'webAuthnPrfDecryptionOption',
+  }]);
+  assert.equal(compat.masterPasswordUnlock.salt, 'user@example.com');
+  assert.equal(compat.masterPasswordUnlock.masterKeyWrappedUserKey, '2.wrapped-user-key');
+  assert.equal(compat.masterPasswordUnlock.kdf.iterations, 600000);
+
+  // Callers without passkeys keep the previous shape, just fully populated.
+  const withoutPasskeys: any = buildUserDecryptionCompat(user);
+  assert.deepEqual(withoutPasskeys.webAuthnPrfOptions, []);
+  assert.equal(withoutPasskeys.webAuthnPrfOption, null);
+  assert.equal(withoutPasskeys.userKeyId, null);
 });

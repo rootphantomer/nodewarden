@@ -139,7 +139,11 @@ export async function handleSync(request: Request, env: Env, userId: string): Pr
       Object: 'userDecryption',
     },
     UserDecryptionOptions: userDecryptionOptions,
-    userDecryption: buildUserDecryptionCompat(user) as SyncResponse['userDecryption'],
+    userDecryption: buildUserDecryptionCompat(
+      user,
+      webAuthnPrfOptions,
+      user.userKeyId ?? null
+    ) as SyncResponse['userDecryption'],
     object: 'sync',
   };
 
